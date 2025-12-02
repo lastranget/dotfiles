@@ -1,17 +1,17 @@
 #add intelliJ toolbox to path
-export PATH=$PATH:/home/txl25/apps/jetbrains-toolbox-2.8.0.51430/bin
+export PATH=$PATH:/home/lastranget/apps/jetbrains-toolbox-2.8.0.51430/bin
 
 #add intelliJ to path
-export PATH=$PATH:/home/txl25/.local/share/JetBrains/Toolbox/scripts
+export PATH=$PATH:/home/lastranget/.local/share/JetBrains/Toolbox/scripts
 
 #add scripts directory to path
-export PATH=$PATH:/home/txl25/scripts
+export PATH=$PATH:/home/lastranget/scripts
 
 #add .local/bin to path for lazydocker
-export PATH=$PATH:/home/txl25/.local/bin
+export PATH=$PATH:/home/lastranget/.local/bin
 
 #add coursier to path for scala lsp
-export PATH=$PATH:/home/txl25/.local/share/coursier/bin
+export PATH=$PATH:/home/lastranget/.local/share/coursier/bin
 
 # Search current and parent directories for env.sh and run it with the supplied options
 e () {
@@ -67,11 +67,11 @@ docker-nuke() {
     docker volume ls -q | xargs -r docker volume rm
     docker network ls -q --filter "type=custom" | xargs -r docker network rm
 }
-alias cfg='/usr/bin/git --git-dir=/home/txl25/.cfg/ --work-tree=/home/txl25'
+alias cfg='/usr/bin/git --git-dir=/home/lastranget/.cfg/ --work-tree=/home/lastranget'
 
 cfg-stage() {
   local files
-  files=$(config ls-files --others --exclude-standard -- .)
+  files=$(cfg ls-files --others --exclude-standard -- .)
   
   if [[ -z "$files" ]]; then
     echo "No untracked files in current directory"
@@ -84,7 +84,7 @@ cfg-stage() {
   read -rp "Stage these files? [y/n] " response
   
   if [[ "$response" == "y" ]]; then
-    echo "$files" | xargs config add
+    echo "$files" | xargs cfg add
     echo "Files staged"
   else
     echo "Cancelled"
