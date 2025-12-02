@@ -1,0 +1,9 @@
+enable_audio_bell no
+
+include ./theme.conf
+
+# # Font
+# font_family       AtkynsonMono NFM
+# bold_font         AtkynsonMono NFM Bold
+# italic_font       AtkynsonMono NFM Italic
+# bold_italic_font  AtkynsonMono NFM Bold Italic
