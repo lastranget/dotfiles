@@ -67,4 +67,26 @@ docker-nuke() {
     docker volume ls -q | xargs -r docker volume rm
     docker network ls -q --filter "type=custom" | xargs -r docker network rm
 }
-alias config='/usr/bin/git --git-dir=/home/txl25/.cfg/ --work-tree=/home/txl25'
+alias cfg='/usr/bin/git --git-dir=/home/txl25/.cfg/ --work-tree=/home/txl25'
+
+cfg-stage() {
+  local files
+  files=$(config ls-files --others --exclude-standard -- .)
+  
+  if [[ -z "$files" ]]; then
+    echo "No untracked files in current directory"
+    return 0
+  fi
+  
+  echo "Untracked files to be staged:"
+  echo "$files"
+  echo
+  read -rp "Stage these files? [y/n] " response
+  
+  if [[ "$response" == "y" ]]; then
+    echo "$files" | xargs config add
+    echo "Files staged"
+  else
+    echo "Cancelled"
+  fi
+}
