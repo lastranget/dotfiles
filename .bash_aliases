@@ -90,3 +90,6 @@ cfg-stage() {
     echo "Cancelled"
   fi
 }
+
+# claude dangerous alias
+alias clauded='claude --dangerously-skip-permissions'
