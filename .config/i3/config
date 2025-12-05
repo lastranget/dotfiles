@@ -37,6 +37,9 @@ exec --no-startup-id nm-applet
 # Set DPI for 150% scaling (96 * 1.5 = 144)
 exec --no-startup-id xrandr --dpi 144
 
+# Swap caps lock and control
+exec --no-startup-id setxkbmap -option ctrl:swapcaps
+
 # Use pactl to adjust volume in PulseAudio.
 set $refresh_i3status killall -SIGUSR1 i3status
 bindsym XF86AudioRaiseVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ +10% && $refresh_i3status

@@ -93,3 +93,6 @@ cfg-stage() {
 
 # claude dangerous alias
 alias clauded='claude --dangerously-skip-permissions'
+
+# open neovim with a server
+alias svim='nvim --listen /tmp/nvim'
