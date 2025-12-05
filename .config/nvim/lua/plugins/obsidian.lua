@@ -35,7 +35,7 @@ return {
       -- A map for custom variables, the key should be the variable and the value a function
       substitutions = {},
     },
-    notes_subdir="work/fleeting",
+    notes_subdir="fleeting",
     new_notes_location = "notes_subdir",
 
     -- Optional, customize how note IDs are generated given an optional title.
