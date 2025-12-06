@@ -6,7 +6,7 @@ return {
 
     -- TabLine: TabList Component
     local Tabpage = {
-      provider = function(self)
+      init = function(self)
         -- Get all windows in this tabpage
         local wins = vim.api.nvim_tabpage_list_wins(self.tabpage)
 
@@ -57,7 +57,9 @@ return {
           icon = "󰓩 "
         end
 
-        return " " .. self.tabnr .. " " .. icon .. display .. " "
+        -- Store for children to use
+        self.icon = icon
+        self.display = display
       end,
       hl = function(self)
         if not self.is_active then
@@ -66,6 +68,19 @@ return {
           return "TabLineSel"
         end
       end,
+      -- Tab number
+      { provider = function(self) return " " .. self.tabnr .. " " end },
+      -- Icon
+      { provider = function(self) return self.icon end },
+      -- Filename (italicized only when active)
+      {
+        provider = function(self) return self.display .. " " end,
+        hl = function(self)
+          if self.is_active then
+            return { italic = true }
+          end
+        end,
+      },
     }
 
     -- Separator between tabs (not after the last tab)
@@ -159,11 +174,11 @@ return {
         },
       },
       provider = function(self)
-        return " %2(" .. self.mode_names[self.mode] .. "%) "
+        return " " .. self.mode_names[self.mode] .. " "
       end,
       hl = function(self)
         local mode = self.mode:sub(1, 1)
-        return { fg = "bg0", bg = self.mode_colors[mode], bold = true }
+        return { fg = "bg0", bg = self.mode_colors[mode], bold = true, italic = false }
       end,
       update = {
         "ModeChanged",
