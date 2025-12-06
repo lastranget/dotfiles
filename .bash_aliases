@@ -2,13 +2,13 @@
 alias fresh="source $HOME/.bashrc"
 
 #add intelliJ toolbox to path
-export PATH=$PATH:/home/lastranget/apps/jetbrains-toolbox-2.8.0.51430/bin
+export PATH=$PATH:/home/txl25/apps/jetbrains-toolbox-2.8.0.51430/bin
 
 #add intelliJ to path
-export PATH=$PATH:/home/lastranget/.local/share/JetBrains/Toolbox/scripts
+export PATH=$PATH:/home/txl25/.local/share/JetBrains/Toolbox/scripts
 
 #add scripts directory to path
-export PATH=$PATH:/home/lastranget/scripts
+export PATH=$PATH:/home/txl25/scripts
 
 # git-unravel / git-ravel: peel commits off HEAD (keeping changes) and knit them
 # back byte-identical. Uses $HOME so it works regardless of username.
@@ -16,10 +16,10 @@ export PATH=$PATH:/home/lastranget/scripts
 export PATH="$PATH:$HOME/scripts/git_unravel"
 
 #add .local/bin to path for lazydocker
-export PATH=$PATH:/home/lastranget/.local/bin
+export PATH=$PATH:/home/txl25/.local/bin
 
 #add coursier to path for scala lsp
-export PATH=$PATH:/home/lastranget/.local/share/coursier/bin
+export PATH=$PATH:/home/txl25/.local/share/coursier/bin
 
 # Worktree-aware dev-environment launcher. Dispatches to a per-repo override in
 # ~/scripts/worktree-env/<repo>/new/ when one exists (so the container binds to
@@ -338,7 +338,7 @@ alias umnt=unmount-usb
 alias eink='nvim "/home/txl25/vaults/Main/work/fleeting/Work Eink Tasks.md"'
 
 #which weekly log nvim's <leader>ow (and harpoon's h2) opens: personal or work; <leader>oW opens the other
-export OBSIDIAN_OW=personal
+export OBSIDIAN_OW=work
 
 #obsidian harpoon: ha = pin vault notes, h = open a pinned note (see ~/scripts/obsidian-harpoon/harpoon)
 alias ha="$HOME/scripts/obsidian-harpoon/harpoon add"
