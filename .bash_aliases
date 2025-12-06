@@ -2,19 +2,19 @@
 alias fresh="source $HOME/.bashrc"
 
 #add intelliJ toolbox to path
-export PATH=$PATH:/home/lastranget/apps/jetbrains-toolbox-2.8.0.51430/bin
+export PATH=$PATH:/home/txl25/apps/jetbrains-toolbox-2.8.0.51430/bin
 
 #add intelliJ to path
-export PATH=$PATH:/home/lastranget/.local/share/JetBrains/Toolbox/scripts
+export PATH=$PATH:/home/txl25/.local/share/JetBrains/Toolbox/scripts
 
 #add scripts directory to path
-export PATH=$PATH:/home/lastranget/scripts
+export PATH=$PATH:/home/txl25/scripts
 
 #add .local/bin to path for lazydocker
-export PATH=$PATH:/home/lastranget/.local/bin
+export PATH=$PATH:/home/txl25/.local/bin
 
 #add coursier to path for scala lsp
-export PATH=$PATH:/home/lastranget/.local/share/coursier/bin
+export PATH=$PATH:/home/txl25/.local/share/coursier/bin
 
 # Search current and parent directories for env.sh and run it with the supplied options
 e () {
