@@ -130,12 +130,16 @@ vim.keymap.set("n", "<leader>ol", "<cmd>Obsidian links<cr>", {
 vim.keymap.set("n", "<leader>on", "<cmd>Obsidian new_from_template<cr>", {
   desc = "Obsidian new",
 })
+vim.keymap.set("n", "<leader>oh", "<cmd>Obsidian tags<cr>", {
+  desc = "Obsidian new",
+})
 vim.keymap.set("n", "<Tab>", function () require("obsidian.api").nav_link("next") end, {
     desc = "Go to next link"
 })
 vim.keymap.set("n", "<S-Tab>", function () require("obsidian.api").nav_link("prev") end, {
     desc = "Go to previous link"
 })
+
 
 -- Adding an easy way to show diagnostic in a pop up window
 vim.keymap.set("n", "<leader>tD", function () vim.diagnostic.open_float() end, {
