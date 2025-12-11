@@ -67,7 +67,8 @@ docker-nuke() {
     docker volume ls -q | xargs -r docker volume rm
     docker network ls -q --filter "type=custom" | xargs -r docker network rm
 }
-alias cfg='/usr/bin/git --git-dir=/home/lastranget/.cfg/ --work-tree=/home/lastranget'
+
+alias cfg='/usr/bin/git --git-dir="$DOTFILES_DIR/" --work-tree="$HOME"'
 
 cfg-stage() {
   local files
