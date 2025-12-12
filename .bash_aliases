@@ -71,6 +71,7 @@ docker-nuke() {
     docker network ls -q --filter "type=custom" | xargs -r docker network rm
 }
 
+export DOTFILES_DIR="$HOME/.cfg"
 alias cfg='/usr/bin/git --git-dir="$DOTFILES_DIR/" --work-tree="$HOME"'
 
 cfg-stage() {
@@ -104,3 +105,17 @@ alias svim='nvim --listen /tmp/nvim'
 # check on neovim processes and kill them
 alias nvim-check='ss -lx | grep nvim | grep -oP "nvim\.\K[0-9]+" | xargs -I{} ps -p {} -o pid,ppid,tty,cmd'
 alias nvim-kill='ss -lx | grep nvim | grep -oP "nvim\.\K[0-9]+" | xargs -r kill -9'
+nvim-sessions() {
+  printf "%-20s %-30s %s\n" "SESSION" "FILE" "PID"
+  printf "%-20s %-30s %s\n" "-------" "----" "---"
+  ss -lx | grep -oP 'nvim\.\K[0-9]+' | while read pid; do
+    tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+    if [[ -n "$tty" && "$tty" != "?" ]]; then
+      session=$(tmux list-panes -a -F '#{pane_tty} #{session_name}:#{window_index}.#{pane_index}' 2>/dev/null | grep "$tty" | awk '{print $2}')
+    else
+      session="(detached)"
+    fi
+    file=$(ps -o args= -p "$pid" 2>/dev/null | sed 's/.*--embed //')
+    printf "%-20s %-30s %s\n" "${session:-(unknown)}" "$file" "(pid: $pid)"
+  done
+}
