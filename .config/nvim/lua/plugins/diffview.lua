@@ -34,8 +34,10 @@ return {
       "<leader>dq",
       function()
         require("diffview").close()
+        vim.env.GIT_DIR = nil
+        vim.env.GIT_WORK_TREE = nil
       end,
-      desc = "Diffview Close"
+      desc = "Diffview Close (clear git env)"
     },
     {
       "<leader>df",
@@ -50,6 +52,17 @@ return {
         vim.cmd('DiffviewFileHistory')
       end,
       desc = "Diffview branch history"
+    },
+    {
+      "<leader>dc",
+      function()
+        local git_dir = vim.fn.expand('$HOME') .. '/.cfg'
+        local work_tree = vim.fn.expand('$HOME')
+        vim.env.GIT_DIR = git_dir
+        vim.env.GIT_WORK_TREE = work_tree
+        require("diffview").open({})
+      end,
+      desc = "Diffview Open Dotfiles"
     },
   }
 }

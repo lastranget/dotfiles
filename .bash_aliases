@@ -1,3 +1,6 @@
+# refresh aliases
+alias fresh="source $HOME/.bashrc"
+
 #add intelliJ toolbox to path
 export PATH=$PATH:/home/lastranget/apps/jetbrains-toolbox-2.8.0.51430/bin
 
@@ -97,3 +100,7 @@ alias clauded='claude --dangerously-skip-permissions'
 
 # open neovim with a server
 alias svim='nvim --listen /tmp/nvim'
+
+# check on neovim processes and kill them
+alias nvim-check='ss -lx | grep nvim | grep -oP "nvim\.\K[0-9]+" | xargs -I{} ps -p {} -o pid,ppid,tty,cmd'
+alias nvim-kill='ss -lx | grep nvim | grep -oP "nvim\.\K[0-9]+" | xargs -r kill -9'
