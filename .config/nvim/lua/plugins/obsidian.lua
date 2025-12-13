@@ -20,6 +20,17 @@ return {
 
   opts = {
     ui = { enable = false }, -- use render-markdown instead
+
+    -- Disable backup files when editing vault files to prevent sync conflicts
+    callbacks = {
+      ---@param note obsidian.Note
+      enter_note = function(note)
+        vim.opt_local.backup = false
+        vim.opt_local.writebackup = false
+        vim.opt_local.swapfile = false
+      end,
+    },
+
     workspaces = {
       {
         name = "Main",
