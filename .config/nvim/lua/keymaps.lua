@@ -109,7 +109,7 @@ vim.keymap.set('n', '<leader>0', function()
   vim.cmd('tablast')
 end, { desc = "Go to last tab" })
 -- Adding obsidian commands here for now to fix issue
-vim.keymap.set("n", "<leader>ch", "<cmd>Obsidian toggle_checkbox<cr>", {
+vim.keymap.set("n", "<leader>tc", "<cmd>Obsidian toggle_checkbox<cr>", {
   desc = "Toggle checkbox",
 })
 vim.keymap.set("n", "<leader>oq", "<cmd>Obsidian quick_switch<cr>", {
@@ -140,8 +140,38 @@ vim.keymap.set("n", "<S-Tab>", function () require("obsidian.api").nav_link("pre
     desc = "Go to previous link"
 })
 
+vim.keymap.set('n', '<leader>o#', function()
+  local reg = vim.v.register
+  local line = vim.api.nvim_get_current_line()
+
+  -- Extract header text (strip leading #'s and whitespace)
+  local header = line:match('^#+%s*(.+)$')
+
+  if not header then
+    vim.notify('Current line is not a markdown header', vim.log.levels.WARN)
+    return
+  end
+
+  -- Get filename without extension
+  local filename = vim.fn.expand('%:t:r')
+
+  -- Build obsidian link
+  local link = string.format('[[%s#%s|%s]]', filename, header, header)
+
+  vim.fn.setreg(reg, link)
+  vim.notify('Yanked: ' .. link)
+end, { desc = 'Yank Obsidian header link' })
 
 -- Adding an easy way to show diagnostic in a pop up window
 vim.keymap.set("n", "<leader>tD", function () vim.diagnostic.open_float() end, {
   desc = "Toggle diagnostic pop-up window",
 })
+
+-- Add command to invoke repeatable functions
+vim.keymap.set('n', '<C-q>', function()
+  if _G.Repeatable.last_cmd then
+    _G.Repeatable.last_cmd()
+  else
+    vim.notify('No command to repeat', vim.log.levels.WARN)
+  end
+end, { desc = 'Repeat last command' })

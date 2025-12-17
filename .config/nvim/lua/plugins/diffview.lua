@@ -24,14 +24,14 @@ return {
   },
   keys = {
     {
-      "<leader>do",
+      "<leader>co",
       function()
         require("diffview").open({})
       end,
       desc = "Diffview Open"
     },
     {
-      "<leader>dq",
+      "<leader>cq",
       function()
         require("diffview").close()
         vim.env.GIT_DIR = nil
@@ -40,21 +40,21 @@ return {
       desc = "Diffview Close (clear git env)"
     },
     {
-      "<leader>df",
+      "<leader>cf",
       function()
         vim.cmd('DiffviewFileHistory %')
       end,
       desc = "Diffview file history"
     },
     {
-      "<leader>db",
+      "<leader>cb",
       function()
         vim.cmd('DiffviewFileHistory')
       end,
       desc = "Diffview branch history"
     },
     {
-      "<leader>dc",
+      "<leader>cc",
       function()
         local git_dir = vim.fn.expand('$HOME') .. '/.cfg'
         local work_tree = vim.fn.expand('$HOME')
