@@ -4,13 +4,15 @@ return {
     "mfussenegger/nvim-dap",
     lazy = true,
     dependencies = {
-        -- Required for nvim-dap-ui
         "nvim-neotest/nvim-nio",
     },
     keys = {
+        { "<leader>db", function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },
+        { "<leader>dB", function() require("dap").set_breakpoint(vim.fn.input("Breakpoint condition: ")) end, desc = "Conditional Breakpoint" },
         { "<leader>dl", function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log point message: ")) end, desc = "Log Point" },
         { "<leader>dr", function() require("dap").repl.open() end, desc = "Open REPL" },
         { "<leader>dR", function() require("dap").run_last() end, desc = "Run Last" },
+        { "<leader>dC", function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" }
     },
     config = function()
         local dap = require("dap")
@@ -48,11 +50,227 @@ return {
             callback = set_dap_highlights,
         })
 
-        -- Note: Java adapter is automatically registered by nvim-jdtls when bundles are configured
-        -- You can add a fallback attach configuration here if needed:
+        -- ============================================================================
+        -- Breakpoint Sets: Save, Load, Unload, Delete
+        -- ============================================================================
+
+        local function get_breakpoints_dir()
+            local root = vim.fn.getcwd()
+            return root .. "/.dap-breakpoints"
+        end
+
+        local function ensure_breakpoints_dir()
+            local dir = get_breakpoints_dir()
+            if vim.fn.isdirectory(dir) == 0 then
+                vim.fn.mkdir(dir, "p")
+            end
+            return dir
+        end
+
+        local function save_breakpoints()
+            local bps = {}
+            local breakpoints = require("dap.breakpoints").get()
+
+            local has_breakpoints = false
+            for bufnr, buf_bps in pairs(breakpoints) do
+                local file = vim.api.nvim_buf_get_name(bufnr)
+                if file ~= "" and #buf_bps > 0 then
+                    bps[file] = buf_bps
+                    has_breakpoints = true
+                end
+            end
+
+            if not has_breakpoints then
+                vim.notify("No breakpoints to save", vim.log.levels.WARN)
+                return
+            end
+
+            vim.ui.input({ prompt = "Breakpoint set name: " }, function(name)
+                if not name or name == "" then
+                    vim.notify("Save cancelled", vim.log.levels.INFO)
+                    return
+                end
+
+                local filename = name:gsub("[^%w%-_]", "_") .. ".json"
+                local dir = ensure_breakpoints_dir()
+                local filepath = dir .. "/" .. filename
+
+                local fp = io.open(filepath, "w")
+                if fp then
+                    fp:write(vim.fn.json_encode(bps))
+                    fp:close()
+                    vim.notify("Saved breakpoints to: " .. name, vim.log.levels.INFO)
+                else
+                    vim.notify("Failed to save breakpoints", vim.log.levels.ERROR)
+                end
+            end)
+        end
+
+        local function load_breakpoints()
+            local dir = get_breakpoints_dir()
+
+            if vim.fn.isdirectory(dir) == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local files = vim.fn.globpath(dir, "*.json", false, true)
+
+            if #files == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local items = {}
+            for _, filepath in ipairs(files) do
+                local name = vim.fn.fnamemodify(filepath, ":t:r")
+                table.insert(items, name)
+            end
+
+            vim.ui.select(items, {
+                prompt = "Select breakpoint set to load:",
+            }, function(choice, idx)
+                if not choice then
+                    return
+                end
+
+                local filepath = files[idx]
+                local fp = io.open(filepath, "r")
+                if not fp then
+                    vim.notify("Failed to read breakpoint file", vim.log.levels.ERROR)
+                    return
+                end
+
+                local content = fp:read("*a")
+                fp:close()
+
+                local ok, bps = pcall(vim.fn.json_decode, content)
+                if not ok or not bps then
+                    vim.notify("Failed to parse breakpoint file", vim.log.levels.ERROR)
+                    return
+                end
+
+                local loaded_count = 0
+                for file, file_bps in pairs(bps) do
+                    for _, bp in ipairs(file_bps) do
+                        local bufnr = vim.fn.bufnr(file, true)
+                        vim.fn.bufload(bufnr)
+                        require("dap.breakpoints").set(bp, bufnr, bp.line)
+                        loaded_count = loaded_count + 1
+                    end
+                end
+
+                vim.notify("Loaded " .. loaded_count .. " breakpoints from: " .. choice, vim.log.levels.INFO)
+            end)
+        end
+
+        local function unload_breakpoints()
+            local dir = get_breakpoints_dir()
+
+            if vim.fn.isdirectory(dir) == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local files = vim.fn.globpath(dir, "*.json", false, true)
+
+            if #files == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local items = {}
+            for _, filepath in ipairs(files) do
+                local name = vim.fn.fnamemodify(filepath, ":t:r")
+                table.insert(items, name)
+            end
+
+            vim.ui.select(items, {
+                prompt = "Select breakpoint set to unload:",
+            }, function(choice, idx)
+                if not choice then
+                    return
+                end
+
+                local filepath = files[idx]
+                local fp = io.open(filepath, "r")
+                if not fp then
+                    vim.notify("Failed to read breakpoint file", vim.log.levels.ERROR)
+                    return
+                end
+
+                local content = fp:read("*a")
+                fp:close()
+
+                local ok, bps = pcall(vim.fn.json_decode, content)
+                if not ok or not bps then
+                    vim.notify("Failed to parse breakpoint file", vim.log.levels.ERROR)
+                    return
+                end
+
+                local removed_count = 0
+                for file, file_bps in pairs(bps) do
+                    local bufnr = vim.fn.bufnr(file)
+                    if bufnr ~= -1 then
+                        for _, bp in ipairs(file_bps) do
+                            require("dap.breakpoints").remove(bufnr, bp.line)
+                            removed_count = removed_count + 1
+                        end
+                    end
+                end
+
+                vim.notify("Removed " .. removed_count .. " breakpoints from: " .. choice, vim.log.levels.INFO)
+            end)
+        end
+
+        local function delete_breakpoint_set()
+            local dir = get_breakpoints_dir()
+
+            if vim.fn.isdirectory(dir) == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local files = vim.fn.globpath(dir, "*.json", false, true)
+
+            if #files == 0 then
+                vim.notify("No saved breakpoint sets found", vim.log.levels.WARN)
+                return
+            end
+
+            local items = {}
+            for _, filepath in ipairs(files) do
+                local name = vim.fn.fnamemodify(filepath, ":t:r")
+                table.insert(items, name)
+            end
+
+            vim.ui.select(items, {
+                prompt = "Select breakpoint set to DELETE:",
+            }, function(choice, idx)
+                if not choice then
+                    return
+                end
+
+                local filepath = files[idx]
+                if vim.fn.delete(filepath) == 0 then
+                    vim.notify("Deleted: " .. choice, vim.log.levels.INFO)
+                else
+                    vim.notify("Failed to delete: " .. choice, vim.log.levels.ERROR)
+                end
+            end)
+        end
+
+        vim.keymap.set("n", "<leader>dS", save_breakpoints, { desc = "Save Breakpoints" })
+        vim.keymap.set("n", "<leader>dL", load_breakpoints, { desc = "Load Breakpoints" })
+        vim.keymap.set("n", "<leader>dU", unload_breakpoints, { desc = "Unload Breakpoint Set" })
+        vim.keymap.set("n", "<leader>dX", delete_breakpoint_set, { desc = "Delete Breakpoint Set" })
+
+        -- ============================================================================
+        -- Java Debug Configurations
+        -- ============================================================================
+
         dap.configurations.java = dap.configurations.java or {}
 
-        -- Add a remote attach configuration (useful for debugging running applications)
         table.insert(dap.configurations.java, {
             type = "java",
             request = "attach",
@@ -74,7 +292,7 @@ return {
             pattern = "dap-repl",
             callback = function()
                 require("dap.ext.autocompl").attach()
-                vim.b.completion = false -- disables blink for this buffer
+                vim.b.completion = false
             end,
         })
     end,

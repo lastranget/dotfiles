@@ -4,6 +4,53 @@ return {
     local conditions = require("heirline.conditions")
     local utils = require("heirline.utils")
 
+    -- Helper function to parse JDT URIs (for Maven dependency files)
+    local function parse_jdt_uri(uri)
+      if not uri or not uri:match("^jdt://") then
+        return nil
+      end
+
+      local result = {}
+
+      -- Extract filename from the path portion (before the ?)
+      -- Format: jdt://contents/jar-name.jar/package/ClassName.class?...
+      local path_part = uri:match("^jdt://contents/[^/]+/[^/]+/([^?]+)")
+      if path_part then
+        result.filename = path_part
+      end
+
+      -- Extract maven coordinates from query string
+      -- Format: ...=/maven.groupId=/org.cas.seti=/=/maven.artifactId=/models=/...
+      local group_id = uri:match("maven%.groupId=/([^/=]+)")
+      local artifact_id = uri:match("maven%.artifactId=/([^/=]+)")
+
+      if group_id then
+        result.group_id = group_id
+      end
+      if artifact_id then
+        result.artifact_id = artifact_id
+      end
+
+      return result
+    end
+
+    -- Format a parsed JDT result for display
+    local function format_jdt_display(parsed)
+      if not parsed then
+        return nil
+      end
+
+      local display = parsed.filename or "[Unknown]"
+
+      if parsed.group_id and parsed.artifact_id then
+        display = display .. " [" .. parsed.group_id .. ":" .. parsed.artifact_id .. "]"
+      elseif parsed.artifact_id then
+        display = display .. " [" .. parsed.artifact_id .. "]"
+      end
+
+      return display
+    end
+
     -- TabLine: TabList Component
     local Tabpage = {
       init = function(self)
@@ -39,15 +86,22 @@ return {
           display = "[No Name]"
           icon = "󰈤 "
         else
-          local filename = vim.fn.fnamemodify(bufname, ":t")
-          local extension = vim.fn.fnamemodify(bufname, ":e")
-          display = filename
+          -- Check if this is a JDT URI (Maven dependency)
+          local jdt_parsed = parse_jdt_uri(bufname)
+          if jdt_parsed then
+            display = format_jdt_display(jdt_parsed)
+            icon = " "  -- Java icon for dependency files
+          else
+            local filename = vim.fn.fnamemodify(bufname, ":t")
+            local extension = vim.fn.fnamemodify(bufname, ":e")
+            display = filename
 
-          -- Get file icon
-          if has_devicons then
-            local file_icon = devicons.get_icon(filename, extension, { default = true })
-            if file_icon then
-              icon = file_icon .. " "
+            -- Get file icon
+            if has_devicons then
+              local file_icon = devicons.get_icon(filename, extension, { default = true })
+              if file_icon then
+                icon = file_icon .. " "
+              end
             end
           end
         end
@@ -234,9 +288,17 @@ return {
     local FileName = {
       init = function(self)
         self.filename = vim.api.nvim_buf_get_name(0)
+        -- Parse JDT URI if applicable
+        self.jdt_parsed = parse_jdt_uri(self.filename)
       end,
       {
         provider = function(self)
+          -- Handle JDT URIs (Maven dependencies)
+          if self.jdt_parsed then
+            return format_jdt_display(self.jdt_parsed) .. " "
+          end
+
+          -- Normal file handling
           local filename = vim.fn.fnamemodify(self.filename, ":t")
           if filename == "" then
             return "[No Name] "

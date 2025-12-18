@@ -42,7 +42,7 @@ return {
                 {
                     -- Left sidebar
                     elements = {
-                        { id = "scopes", size = 0.25 },
+                        { id = "console", size = 0.25 },
                         { id = "breakpoints", size = 0.25 },
                         { id = "stacks", size = 0.25 },
                         { id = "watches", size = 0.25 },
@@ -54,7 +54,7 @@ return {
                     -- Bottom panel
                     elements = {
                         { id = "repl", size = 0.5 },
-                        { id = "console", size = 0.5 },
+                        { id = "scopes", size = 0.5 },
                     },
                     size = 10, -- Height in rows
                     position = "bottom",
