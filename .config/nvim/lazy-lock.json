@@ -4,7 +4,6 @@
   "blink.cmp": { "branch": "main", "commit": "b19413d214068f316c78978b08264ed1c41830ec" },
   "buffer_walker.nvim": { "branch": "main", "commit": "a4f1d09be73a26c5bfbd7fbc7aa33809306d9a48" },
   "bullets.vim": { "branch": "master", "commit": "89294b8930e660936374fb763ac48a1ac51dd29c" },
-  "colorful-winsep.nvim": { "branch": "main", "commit": "e555611c8f39918e30d033a97ea1a5af457ce75e" },
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },
   "everforest": { "branch": "master", "commit": "b10ed9a8b37d6b7448908be98ff8f58f550adc48" },
   "fidget.nvim": { "branch": "main", "commit": "e32b672d8fd343f9d6a76944fedb8c61d7d8111a" },

@@ -12,6 +12,7 @@ return {
         { "<leader>dl", function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log point message: ")) end, desc = "Log Point" },
         { "<leader>dr", function() require("dap").repl.open() end, desc = "Open REPL" },
         { "<leader>dR", function() require("dap").run_last() end, desc = "Run Last" },
+        { "<leader>dD", function() require("dap").disconnect() end, desc = "Disconnect" },
         { "<leader>dC", function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" }
     },
     config = function()
