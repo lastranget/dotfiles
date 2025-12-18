@@ -67,6 +67,20 @@ return {
             return dir
         end
 
+        -- Sync all breakpoints with active debug session
+        local function sync_breakpoints_with_session()
+            local session = dap.session()
+            if not session then
+                return
+            end
+            local all_bps = require("dap.breakpoints").get()
+            for bufnr, _ in pairs(all_bps) do
+                pcall(function()
+                    session:set_breakpoints(require("dap.breakpoints").get(bufnr))
+                end)
+            end
+        end
+
         local function save_breakpoints()
             local bps = {}
             local breakpoints = require("dap.breakpoints").get()
@@ -74,7 +88,7 @@ return {
             local has_breakpoints = false
             for bufnr, buf_bps in pairs(breakpoints) do
                 local file = vim.api.nvim_buf_get_name(bufnr)
-                if file ~= "" and #buf_bps > 0 then
+                if file ~= "" and next(buf_bps) ~= nil then
                     bps[file] = buf_bps
                     has_breakpoints = true
                 end
@@ -152,13 +166,15 @@ return {
 
                 local loaded_count = 0
                 for file, file_bps in pairs(bps) do
+                    local bufnr = vim.fn.bufnr(file, true)
+                    vim.fn.bufload(bufnr)
                     for _, bp in ipairs(file_bps) do
-                        local bufnr = vim.fn.bufnr(file, true)
-                        vim.fn.bufload(bufnr)
                         require("dap.breakpoints").set(bp, bufnr, bp.line)
                         loaded_count = loaded_count + 1
                     end
                 end
+
+                vim.defer_fn(sync_breakpoints_with_session, 100)
 
                 vim.notify("Loaded " .. loaded_count .. " breakpoints from: " .. choice, vim.log.levels.INFO)
             end)
@@ -210,14 +226,15 @@ return {
 
                 local removed_count = 0
                 for file, file_bps in pairs(bps) do
-                    local bufnr = vim.fn.bufnr(file)
-                    if bufnr ~= -1 then
-                        for _, bp in ipairs(file_bps) do
-                            require("dap.breakpoints").remove(bufnr, bp.line)
-                            removed_count = removed_count + 1
-                        end
+                    local bufnr = vim.fn.bufnr(file, true)
+                    vim.fn.bufload(bufnr)
+                    for _, bp in ipairs(file_bps) do
+                        require("dap.breakpoints").remove(bufnr, bp.line)
+                        removed_count = removed_count + 1
                     end
                 end
+
+                vim.defer_fn(sync_breakpoints_with_session, 100)
 
                 vim.notify("Removed " .. removed_count .. " breakpoints from: " .. choice, vim.log.levels.INFO)
             end)
