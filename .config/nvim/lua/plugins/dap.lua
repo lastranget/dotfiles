@@ -305,6 +305,24 @@ return {
             port = 5006,
         })
 
+        -- Add to dap.configurations in your dap.lua
+        dap.configurations.scala = {
+            {
+                type = "scala",
+                request = "attach",
+                name = "Attach to Scala (5005)",
+                hostName = "127.0.0.1",
+                port = 5005,
+            },
+            {
+                type = "scala",
+                request = "attach",
+                name = "Attach to Scala (5006)",
+                hostName = "127.0.0.1",
+                port = 5006,
+            },
+        }
+
         -- Enable DAP completion in REPL buffer
         vim.api.nvim_create_autocmd("FileType", {
             pattern = "dap-repl",
