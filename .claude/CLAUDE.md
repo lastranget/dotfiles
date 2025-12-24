@@ -25,7 +25,7 @@ It can be confusing as to which note type you're intended to work with, so if yo
 
 When creating a new slash command:
 1. Create the command file in `~/.claude/commands/`
-2. Add an entry to the documentation in `~/Documents/Main/ai/claude-code-slash-commands.md`
+2. Add an entry to the documentation in `~/vaults/Main/ai/claude-code-slash-commands.md`
 3. Include the command name and a one-sentence description of what it does
 
 ## System Info

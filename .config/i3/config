@@ -40,6 +40,14 @@ exec --no-startup-id xrandr --dpi 144
 # Swap caps lock and control
 exec --no-startup-id setxkbmap -option ctrl:swapcaps
 
+# Launch ProtonVPN and Obsidian on workspace 10
+exec --no-startup-id protonvpn-app
+exec --no-startup-id obsidian
+
+# Assign ProtonVPN and Obsidian to workspace 10
+assign [class="protonvpn-app"] $ws10
+assign [class="Obsidian"] $ws10
+
 # Use pactl to adjust volume in PulseAudio.
 set $refresh_i3status killall -SIGUSR1 i3status
 bindsym XF86AudioRaiseVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ +10% && $refresh_i3status

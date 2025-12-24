@@ -119,3 +119,17 @@ nvim-sessions() {
     printf "%-20s %-30s %s\n" "${session:-(unknown)}" "$file" "(pid: $pid)"
   done
 }
+
+# Mount a USB flash drive
+mount-usb() {
+  local device="${1:-/dev/sdb1}"
+  udisksctl mount -b "$device"
+}
+alias mnt=mount-usb
+
+# Unmount a USB flash drive
+unmount-usb() {
+  local device="${1:-/dev/sdb1}"
+  udisksctl unmount -b "$device"
+}
+alias umnt=unmount-usb
