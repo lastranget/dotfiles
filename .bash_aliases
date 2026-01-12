@@ -122,14 +122,88 @@ nvim-sessions() {
 
 # Mount a USB flash drive
 mount-usb() {
-  local device="${1:-/dev/sdb1}"
+  local device="$1"
+
+  # If no device specified, detect and show available USB devices
+  if [[ -z "$device" ]]; then
+    local -a unmounted_devices
+
+    # Find all block devices that look like USB drives (sda, sdb, sdc, etc.) and are not mounted
+    while IFS= read -r line; do
+      local name=$(echo "$line" | awk '{print $1}')
+      local mountpoints=$(echo "$line" | awk '{print $2}')
+
+      # Only include devices without mount points (unmounted)
+      if [[ -z "$mountpoints" || "$mountpoints" == "-" ]]; then
+        unmounted_devices+=("/dev/$name")
+      fi
+    done < <(lsblk -d -n -o NAME,MOUNTPOINTS | grep -E '^(sd[a-z]|nvme)' | grep -v nvme0n1)
+
+    if [[ ${#unmounted_devices[@]} -eq 0 ]]; then
+      echo "No unmounted USB devices found."
+      return 1
+    elif [[ ${#unmounted_devices[@]} -eq 1 ]]; then
+      device="${unmounted_devices[0]}"
+      echo "Found USB device: $device"
+    else
+      echo "Found ${#unmounted_devices[@]} unmounted USB devices:"
+      for i in "${!unmounted_devices[@]}"; do
+        echo "$((i+1)). ${unmounted_devices[$i]}"
+      done
+      read -p "Select device to mount (1-${#unmounted_devices[@]}): " choice
+      if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#unmounted_devices[@]} )); then
+        echo "Invalid selection."
+        return 1
+      fi
+      device="${unmounted_devices[$((choice-1))]}"
+    fi
+  fi
+
+  echo "Mounting $device..."
   udisksctl mount -b "$device"
 }
 alias mnt=mount-usb
 
 # Unmount a USB flash drive
 unmount-usb() {
-  local device="${1:-/dev/sdb1}"
+  local device="$1"
+
+  # If no device specified, detect and show mounted USB devices
+  if [[ -z "$device" ]]; then
+    local -a mounted_devices
+
+    # Find all block devices that look like USB drives and are mounted
+    while IFS= read -r line; do
+      local name=$(echo "$line" | awk '{print $1}')
+      local mountpoints=$(echo "$line" | awk '{print $2}')
+
+      # Only include devices with mount points (mounted)
+      if [[ -n "$mountpoints" && "$mountpoints" != "-" ]]; then
+        mounted_devices+=("/dev/$name")
+      fi
+    done < <(lsblk -d -n -o NAME,MOUNTPOINTS | grep -E '^(sd[a-z])' | grep -v nvme0n1)
+
+    if [[ ${#mounted_devices[@]} -eq 0 ]]; then
+      echo "No mounted USB devices found."
+      return 1
+    elif [[ ${#mounted_devices[@]} -eq 1 ]]; then
+      device="${mounted_devices[0]}"
+      echo "Found USB device: $device"
+    else
+      echo "Found ${#mounted_devices[@]} mounted USB devices:"
+      for i in "${!mounted_devices[@]}"; do
+        echo "$((i+1)). ${mounted_devices[$i]}"
+      done
+      read -p "Select device to unmount (1-${#mounted_devices[@]}): " choice
+      if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#mounted_devices[@]} )); then
+        echo "Invalid selection."
+        return 1
+      fi
+      device="${mounted_devices[$((choice-1))]}"
+    fi
+  fi
+
+  echo "Unmounting $device..."
   udisksctl unmount -b "$device"
 }
 alias umnt=unmount-usb
