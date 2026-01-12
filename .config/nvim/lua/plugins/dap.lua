@@ -323,6 +323,102 @@ return {
             },
         }
 
+        -- ============================================================================
+        -- Python Debug Configurations (debugpy via Mason)
+        -- ============================================================================
+
+        local debugpy_path = vim.fn.stdpath("data") .. "/mason/packages/debugpy/venv/bin/python"
+
+        dap.adapters.python = function(cb, config)
+            if config.request == "attach" then
+                local port = (config.connect or config).port
+                local host = (config.connect or config).host or "127.0.0.1"
+                cb({
+                    type = "server",
+                    port = assert(port, "`connect.port` is required for attach"),
+                    host = host,
+                    options = {
+                        source_filetype = "python",
+                    },
+                })
+            else
+                cb({
+                    type = "executable",
+                    command = debugpy_path,
+                    args = { "-m", "debugpy.adapter" },
+                    options = {
+                        source_filetype = "python",
+                    },
+                })
+            end
+        end
+
+        dap.configurations.python = {
+            {
+                type = "python",
+                request = "launch",
+                name = "Launch File",
+                program = "${file}",
+                pythonPath = function()
+                    -- Use activated virtualenv or fall back to system python
+                    if vim.env.VIRTUAL_ENV then
+                        return vim.env.VIRTUAL_ENV .. "/bin/python"
+                    end
+                    return "/usr/bin/python3"
+                end,
+            },
+            {
+                type = "python",
+                request = "launch",
+                name = "Launch File with Arguments",
+                program = "${file}",
+                args = function()
+                    local args_string = vim.fn.input("Arguments: ")
+                    return vim.split(args_string, " +")
+                end,
+                pythonPath = function()
+                    if vim.env.VIRTUAL_ENV then
+                        return vim.env.VIRTUAL_ENV .. "/bin/python"
+                    end
+                    return "/usr/bin/python3"
+                end,
+            },
+            {
+                type = "python",
+                request = "launch",
+                name = "Launch Module",
+                module = function()
+                    return vim.fn.input("Module name: ")
+                end,
+                pythonPath = function()
+                    if vim.env.VIRTUAL_ENV then
+                        return vim.env.VIRTUAL_ENV .. "/bin/python"
+                    end
+                    return "/usr/bin/python3"
+                end,
+            },
+            {
+                type = "python",
+                request = "attach",
+                name = "Attach to Remote (5678)",
+                connect = {
+                    host = "127.0.0.1",
+                    port = 5678,
+                },
+            },
+            {
+                type = "python",
+                request = "attach",
+                name = "Attach to Remote (Custom Port)",
+                connect = function()
+                    return {
+                        host = vim.fn.input("Host [127.0.0.1]: ", "127.0.0.1"),
+                        port = tonumber(vim.fn.input("Port [5678]: ", "5678")),
+                    }
+                end,
+            },
+        }
+
         -- Enable DAP completion in REPL buffer
         vim.api.nvim_create_autocmd("FileType", {
             pattern = "dap-repl",
