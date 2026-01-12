@@ -312,16 +312,6 @@ local config = {
             vim.keymap.set("n", "<leader>dtc", jdtls.test_class, vim.tbl_extend("force", opts, { desc = "Test Class" }))
             vim.keymap.set("n", "<leader>dtm", jdtls.test_nearest_method, vim.tbl_extend("force", opts, { desc = "Test Nearest Method" }))
 
-            -- Debugging keymaps
-            vim.keymap.set("n", "<leader>dc", repeatable(function() require("dap").continue() end), vim.tbl_extend("force", opts, { desc = "Debug Continue" }))
-            vim.keymap.set("n", "<leader>do", repeatable(function() require("dap").step_over() end), vim.tbl_extend("force", opts, { desc = "Debug Step Over" }))
-            vim.keymap.set("n", "<leader>di", repeatable(function() require("dap").step_into() end), vim.tbl_extend("force", opts, { desc = "Debug Step Into" }))
-            vim.keymap.set("n", "<leader>dO", repeatable(function() require("dap").step_out() end), vim.tbl_extend("force", opts, { desc = "Debug Step Out" }))
-            vim.keymap.set("n", "<leader>dt", repeatable(function() require("dap").terminate() end), vim.tbl_extend("force", opts, { desc = "Debug Terminate" }))
-
-            -- Focus frame
-            vim.keymap.set("n", "<leader>dg", function() require("dap").focus_frame() end, { desc = "Go to debug cursor" })
-
             -- Remote attach with auto-detected project name
             vim.keymap.set("n", "<leader>da", function()
                 local root = require("jdtls.setup").find_root({"pom.xml", "build.gradle", ".git"})
