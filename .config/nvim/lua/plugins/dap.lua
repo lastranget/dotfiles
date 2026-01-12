@@ -7,6 +7,7 @@ return {
         "nvim-neotest/nvim-nio",
     },
     keys = {
+        { "<leader>dc", function() require("dap").continue() end, desc = "Debug Continue/Start" },
         { "<leader>db", function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },
         { "<leader>dB", function() require("dap").set_breakpoint(vim.fn.input("Breakpoint condition: ")) end, desc = "Conditional Breakpoint" },
         { "<leader>dl", function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log point message: ")) end, desc = "Log Point" },
