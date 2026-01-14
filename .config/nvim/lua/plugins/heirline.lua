@@ -159,7 +159,7 @@ return {
 
     -- Setup colors from everforest
     local colors = {
-      bg0 = utils.get_highlight("Normal").bg,
+      bg0 = utils.get_highlight("Normal").bg or "#FDF6E3",
       fg = utils.get_highlight("Normal").fg,
       green = utils.get_highlight("String").fg,
       yellow = utils.get_highlight("Number").fg,

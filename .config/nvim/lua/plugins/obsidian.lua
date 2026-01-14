@@ -28,6 +28,13 @@ return {
         vim.opt_local.backup = false
         vim.opt_local.writebackup = false
         vim.opt_local.swapfile = false
+
+        -- Add fold settings
+        vim.opt_local.foldmethod = "expr"
+        vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+        vim.opt.foldlevelstart = 99
+        vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rendering that preserves syntax highlighting
+        vim.cmd('normal! zx')
       end,
     },
 
