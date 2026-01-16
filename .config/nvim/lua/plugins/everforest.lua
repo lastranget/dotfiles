@@ -6,8 +6,9 @@ return {
     -- Set options BEFORE plugin loads
     vim.g.everforest_enable_italic = true
     vim.g.everforest_background = 'medium'
-    vim.g.everforest_transparent_background = 2
+    vim.g.everforest_transparent_background = 0
     vim.o.background = 'light'
+    vim.o.termguicolors = true
 
   end,
   config = function()

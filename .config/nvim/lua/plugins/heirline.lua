@@ -155,8 +155,6 @@ return {
 
     local TabLine = { TabPages }
 
-    -- StatusLine: Cool minimal design with everforest colors
-
     -- Setup colors from everforest
     local colors = {
       bg0 = utils.get_highlight("Normal").bg or "#FDF6E3",
@@ -167,6 +165,12 @@ return {
       blue = utils.get_highlight("Function").fg,
       gray = utils.get_highlight("Comment").fg,
       orange = utils.get_highlight("Constant").fg,
+      halfway_green = 12634221, 
+      halfway_yellow = 15306129,
+      halfway_red = 16163477,
+      halfway_blue = 12634221,
+      halfway_gray = 12826485,
+      halfway_orange = 9751466
     }
 
     -- Vim Mode component with color blocks
@@ -176,35 +180,35 @@ return {
       end,
       static = {
         mode_names = {
-          n = "N",
-          no = "N",
-          nov = "N",
-          noV = "N",
-          ["no\22"] = "N",
-          niI = "N",
-          niR = "N",
-          niV = "N",
-          nt = "N",
-          v = "V",
-          vs = "V",
-          V = "V",
-          Vs = "V",
-          ["\22"] = "V",
-          ["\22s"] = "V",
-          s = "S",
-          S = "S",
-          ["\19"] = "S",
-          i = "I",
-          ic = "I",
-          ix = "I",
-          R = "R",
-          Rc = "R",
-          Rx = "R",
-          Rv = "R",
-          Rvc = "R",
-          Rvx = "R",
-          c = "C",
-          cv = "C",
+          n = "NORMAL",
+          no = "NORMAL",
+          nov = "NORMAL",
+          noV = "NORMAL",
+          ["no\22"] = "NORMAL",
+          niI = "NORMAL",
+          niR = "NORMAL",
+          niV = "NORMAL",
+          nt = "NORMAL",
+          v = "VISUAL",
+          vs = "VISUAL",
+          V = "VISUAL",
+          Vs = "VISUAL",
+          ["\22"] = "VISUAL",
+          ["\22s"] = "VISUAL",
+          s = "SELECT",
+          S = "SELECT",
+          ["\19"] = "SELECT",
+          i = "INSERT",
+          ic = "INSERT",
+          ix = "INSERT",
+          R = "REPLACE",
+          Rc = "REPLACE",
+          Rx = "REPLACE",
+          Rv = "REPLACE",
+          Rvc = "REPLACE",
+          Rvx = "REPLACE",
+          c = "COMMAND",
+          cv = "COMMAND",
           r = ".",
           rm = "M",
           ["r?"] = "?",
@@ -227,13 +231,36 @@ return {
           t = "green",
         },
       },
-      provider = function(self)
-        return " " .. self.mode_names[self.mode] .. " "
-      end,
-      hl = function(self)
-        local mode = self.mode:sub(1, 1)
-        return { fg = "bg0", bg = self.mode_colors[mode], bold = true, italic = false }
-      end,
+      -- the name of the mode
+      {
+        provider = function(self)
+          return "  " .. self.mode_names[self.mode]
+        end,
+        hl = function(self)
+          local mode = self.mode:sub(1, 1)
+          return { fg = "bg0", bg = self.mode_colors[mode], bold = true, italic = false }
+        end,
+      },
+      -- the first diaognal between full color and halfway color
+      {
+        provider = function(self)
+          return ""
+        end,
+        hl = function(self)
+          local mode = self.mode:sub(1, 1)
+          return { fg = self.mode_colors[mode], bg = "halfway_" .. self.mode_colors[mode], bold = true, italic = false }
+        end,
+      },
+      -- the second diaognal, between halfway color and full color
+      {
+        provider = function(self)
+          return ""
+        end,
+        hl = function(self)
+          local mode = self.mode:sub(1, 1)
+          return { fg = "halfway_" .. self.mode_colors[mode], bold = true, italic = false }
+        end,
+      },
       update = {
         "ModeChanged",
         pattern = "*:*",

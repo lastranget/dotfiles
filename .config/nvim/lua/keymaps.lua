@@ -10,14 +10,15 @@ vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.softtabstop = 2
 
-vim.wo.number = true
+vim.wo.number = false
 vim.wo.relativenumber = true
 -- fold settings
 vim.opt.foldmethod = "expr"
 vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
 vim.opt.foldlevel = 99
 vim.opt.foldlevelstart = 1
-vim.opt.foldnestmax = 4 -- this is subjective, so we might want to change it
+vim.opt.foldnestmax = 9 -- this is subjective, so we might want to change it
+vim.opt.foldcolumn = "1"
 
 vim.g.markdown_folding = 1
 vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rendering that preserves syntax highlighting
