@@ -1,6 +1,6 @@
 palette = "everforest_light_medium"
 
-add_newline = false
+add_newline = true
 command_timeout = 1000
 
 format = """

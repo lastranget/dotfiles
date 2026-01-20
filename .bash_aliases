@@ -28,7 +28,7 @@ e () {
   # if the search was successful we will run the script we found
   if [[ -e "$cmd" ]]; then
     # echo "running cmd '$cmd $*'"
-    eval "$cmd $* | tee out.out && push_to_mobile $(basename $PWD) done"
+    eval "$cmd $* | tee out.out && push_to_mobile.sh $(basename $PWD) done"
   # if we cannot find it we will print an error message
   else
       echo "env.sh was not found in the current directory or any parent directory"
