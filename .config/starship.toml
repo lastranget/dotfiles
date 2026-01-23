@@ -69,9 +69,9 @@ format = "[ 󰘬 $branch ]($style)"
 style = "bold bg:background fg:purple"
 
 [git_status]
-conflicted = '🏳'
-ahead = '🏎💨'
+conflicted = '🏳️'
 behind = '😰'
+ahead = '🏎️💨'
 diverged = '😵'
 up_to_date = '✓'
 untracked = '🤷'
@@ -79,7 +79,7 @@ stashed = '📦'
 modified = '📝'
 staged = '[++\($count\)](green)'
 renamed = '👅'
-deleted = '🗑'
+deleted = '🗑️'
 
 [git_state]
 format = '\([$state( $progress_current/$progress_total)]($style)\) '

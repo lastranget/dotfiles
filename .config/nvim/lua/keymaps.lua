@@ -1,4 +1,5 @@
 -- Set space as leader
+--
 local map = vim.api.nvim_set_keymap
 local silent = { silent = true, noremap = true }
 map("", "<Space>", "<Nop>", silent)
@@ -18,7 +19,7 @@ vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
 vim.opt.foldlevel = 99
 vim.opt.foldlevelstart = 1
 vim.opt.foldnestmax = 9 -- this is subjective, so we might want to change it
-vim.opt.foldcolumn = "1"
+vim.opt.foldcolumn = "4"
 
 vim.g.markdown_folding = 1
 vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rendering that preserves syntax highlighting

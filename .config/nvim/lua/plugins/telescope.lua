@@ -31,6 +31,13 @@ return {
   end,
   keys = {
     {
+      "<leader>fl",
+      function()
+        require("telescope.builtin").resume()
+      end,
+      desc = "Telescope resume last search",
+    },
+    {
       "<leader>fr",
       function()
         require("telescope.builtin").lsp_references()
