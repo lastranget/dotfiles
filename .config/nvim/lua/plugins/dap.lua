@@ -19,7 +19,9 @@ return {
         { "<leader>dr", function() require("dap").repl.open() end, desc = "Open REPL" },
         { "<leader>dR", function() require("dap").run_last() end, desc = "Run Last" },
         { "<leader>dD", function() require("dap").disconnect() end, desc = "Disconnect" },
-        { "<leader>dC", function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" }
+        { "<leader>dC", function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" },
+        { "<leader>dx", function() require("dap").set_exception_breakpoints({"raised"}) end, desc = "Break on raised exceptions" },
+        { "<leader>dX", function() require("dap").set_exception_breakpoints({}) end, desc = "Unset raised exceptions" }
     },
     config = function()
         local dap = require("dap")
@@ -287,7 +289,7 @@ return {
         vim.keymap.set("n", "<leader>dS", save_breakpoints, { desc = "Save Breakpoints" })
         vim.keymap.set("n", "<leader>dL", load_breakpoints, { desc = "Load Breakpoints" })
         vim.keymap.set("n", "<leader>dU", unload_breakpoints, { desc = "Unload Breakpoint Set" })
-        vim.keymap.set("n", "<leader>dX", delete_breakpoint_set, { desc = "Delete Breakpoint Set" })
+        vim.keymap.set("n", "<leader>dY", delete_breakpoint_set, { desc = "Delete Breakpoint Set" })
 
         -- ============================================================================
         -- Java Debug Configurations
