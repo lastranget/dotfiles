@@ -80,11 +80,16 @@ Located in `~/.config/nvim/lua/plugins/sidekick.lua`:
 cli = {
   mux = {
     backend = "tmux",
-    enabled = false,  -- IMPORTANT: Disabled to avoid nested tmux issues
+    enabled = true,  -- Can be enabled - we handle nested tmux via env vars
   },
   tools = {
     cascade = {
       cmd = { "nvim" },
+      -- Pass outer tmux info so inner nvim can send OSC 52 to the real terminal
+      env = {
+        CASCADE_OUTER_TMUX = vim.env.TMUX or "",
+        CASCADE_OUTER_TMUX_PANE = vim.env.TMUX_PANE or "",
+      },
       format = function(text, str)
         return "\027i" .. str  -- Enter insert mode before text
       end,
@@ -93,7 +98,7 @@ cli = {
 }
 ```
 
-**Key setting:** `mux.enabled = false` - This prevents sidekick from wrapping the inner Neovim in another tmux session, which would complicate the OSC 52 passthrough.
+**Key setting:** The `env` table passes `CASCADE_OUTER_TMUX` and `CASCADE_OUTER_TMUX_PANE` to the inner Neovim. This allows the inner Neovim to query the *outer* tmux session for the real TTY, even when sidekick's `mux.enabled = true` creates a nested tmux session.
 
 ### 4. tmux Configuration
 
@@ -165,11 +170,24 @@ local fd0 = vim.fn.resolve('/proc/' .. ppid .. '/fd/0')
 
 #### Solution: `tmux display-message -p '#{pane_tty}'` + direct write
 
+For non-nested tmux (outer Neovim):
 ```lua
 local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
 local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
 local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
 os.execute(cmd)
+```
+
+For nested tmux (inner Neovim via sidekick with mux enabled):
+```lua
+-- CASCADE_OUTER_TMUX and CASCADE_OUTER_TMUX_PANE are set by sidekick's env config
+local outer_tmux = vim.env.CASCADE_OUTER_TMUX
+local outer_pane = vim.env.CASCADE_OUTER_TMUX_PANE
+local socket = outer_tmux:match("^([^,]+)")  -- Extract socket path from TMUX var
+local pane_tty = vim.fn.system(
+  string.format("tmux -S %s display-message -t %s -p '#{pane_tty}'", socket, outer_pane)
+):gsub('%s+$', '')
+-- Then write to pane_tty as above
 ```
 
 **Why this works:**
@@ -181,6 +199,26 @@ os.execute(cmd)
 5. Kitty receives the OSC 52 and updates the Mac's system clipboard
 
 **Key insight:** The tmux pane's TTY is always accessible from any process running within that pane, regardless of nesting level. By asking tmux for the pane's TTY path and writing directly to it, we bypass the entire Neovim terminal emulator stack.
+
+#### Handling Nested tmux (sidekick with mux enabled)
+
+When sidekick's `mux.enabled = true`, the inner Neovim runs inside a *nested* tmux session. The problem is that `tmux display-message -p '#{pane_tty}'` returns the inner tmux pane's TTY, which is actually a pipe to the outer Neovim's terminal buffer—not the real terminal.
+
+**Solution:** Pass the outer tmux session info via environment variables:
+
+1. In `sidekick.lua`, the cascade tool config includes:
+   ```lua
+   env = {
+     CASCADE_OUTER_TMUX = vim.env.TMUX or "",
+     CASCADE_OUTER_TMUX_PANE = vim.env.TMUX_PANE or "",
+   }
+   ```
+
+2. In `keymaps.lua`, the `<leader>so` keymap checks for these env vars:
+   - If `CASCADE_OUTER_TMUX` is set, use `tmux -S <socket> display-message -t <pane>` to query the *outer* tmux session
+   - This returns the real TTY connected to Kitty
+
+**Why this works:** The `$TMUX` variable format is `<socket>,<pid>,<session>`. By extracting the socket path and using `tmux -S <socket>`, we can communicate with the outer tmux server even from within a nested tmux session.
 
 ## Workflow
 

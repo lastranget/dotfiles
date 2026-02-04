@@ -15,6 +15,11 @@ return {
         claude = { cmd = { "claude", "--dangerously-skip-permissions"} },
         cascade = {
           cmd = { "nvim" },
+          -- Pass outer tmux info so inner nvim can send OSC 52 to the real terminal
+          env = {
+            CASCADE_OUTER_TMUX = vim.env.TMUX or "",
+            CASCADE_OUTER_TMUX_PANE = vim.env.TMUX_PANE or "",
+          },
           format = function(text, str)
             -- Prepend Escape + 'i' to switch to insert mode before inserting text
             return "\027i" .. str
