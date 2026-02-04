@@ -5,7 +5,7 @@ return {
     nes = { enabled = false },
     cli = {
       win = {
-        layout = "right",
+        layout = "float",
       },
       mux = {
         backend = "tmux",
@@ -45,7 +45,7 @@ return {
     --   desc = "Goto/Apply Next Edit Suggestion",
     -- },
     {
-      "<c-.>",
+      "<c-space>",
       function() require("sidekick.cli").toggle() end,
       desc = "Sidekick Toggle",
       mode = { "n", "t", "i", "x" },
