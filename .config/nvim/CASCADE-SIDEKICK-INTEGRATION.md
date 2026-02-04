@@ -37,27 +37,104 @@ This document describes the integration between Neovim (running on a remote serv
 
 ## How It Works
 
-### 1. Neovim Keymap (`<leader>so`)
+### 1. Neovim Keymaps
 
 Located in `~/.config/nvim/lua/keymaps.lua`:
 
+#### `<leader>so` - Send to existing Cascade chat
 ```lua
 vim.keymap.set('n', '<leader>so', function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local text = table.concat(lines, "\n")
+  if text == "" then
+    vim.notify("Buffer is empty", vim.log.levels.WARN)
+    return
+  end
   local encoded = vim.base64.encode("::cascade::" .. text)
   
-  if vim.env.TMUX then
-    -- Get the tmux pane's TTY and write OSC 52 directly to it
+  -- Check if we're in a nested tmux (sidekick cascade tool sets these)
+  local outer_tmux = vim.env.CASCADE_OUTER_TMUX
+  local outer_pane = vim.env.CASCADE_OUTER_TMUX_PANE
+  
+  if outer_tmux and outer_tmux ~= '' then
+    -- We're in nested tmux - use the outer tmux session to get the real TTY
+    local socket = outer_tmux:match("^([^,]+)")  -- Extract socket path from TMUX var
+    local pane_tty = vim.fn.system(
+      string.format("tmux -S %s display-message -t %s -p '#{pane_tty}'", socket, outer_pane)
+    ):gsub('%s+$', '')
+    if pane_tty ~= '' then
+      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
+      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
+      os.execute(cmd)
+      vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
+    else
+      vim.notify("Could not get outer tmux pane TTY", vim.log.levels.ERROR)
+    end
+  elseif vim.env.TMUX then
+    -- Normal tmux (not nested) - get current pane's TTY
     local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
-    local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
-    local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
-    os.execute(cmd)
+    if pane_tty ~= '' then
+      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
+      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
+      os.execute(cmd)
+      vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
+    else
+      vim.notify("Could not get tmux pane TTY", vim.log.levels.ERROR)
+    end
   else
     local osc = string.format('\027]52;c;%s\a', encoded)
     vim.fn.chansend(vim.v.stderr, osc)
+    vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
   end
 end, { desc = 'Send buffer to Cascade' })
+```
+
+#### `<leader>sno` - Send to new Cascade chat
+```lua
+vim.keymap.set('n', '<leader>sno', function()
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local text = table.concat(lines, "\n")
+  if text == "" then
+    vim.notify("Buffer is empty", vim.log.levels.WARN)
+    return
+  end
+  local encoded = vim.base64.encode("::cascade-new::" .. text)
+  
+  -- Check if we're in a nested tmux (sidekick cascade tool sets these)
+  local outer_tmux = vim.env.CASCADE_OUTER_TMUX
+  local outer_pane = vim.env.CASCADE_OUTER_TMUX_PANE
+  
+  if outer_tmux and outer_tmux ~= '' then
+    -- We're in nested tmux - use the outer tmux session to get the real TTY
+    local socket = outer_tmux:match("^([^,]+)")  -- Extract socket path from TMUX var
+    local pane_tty = vim.fn.system(
+      string.format("tmux -S %s display-message -t %s -p '#{pane_tty}'", socket, outer_pane)
+    ):gsub('%s+$', '')
+    if pane_tty ~= '' then
+      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
+      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
+      os.execute(cmd)
+      vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
+    else
+      vim.notify("Could not get outer tmux pane TTY", vim.log.levels.ERROR)
+    end
+  elseif vim.env.TMUX then
+    -- Normal tmux (not nested) - get current pane's TTY
+    local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
+    if pane_tty ~= '' then
+      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
+      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
+      os.execute(cmd)
+      vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
+    else
+      vim.notify("Could not get tmux pane TTY", vim.log.levels.ERROR)
+    end
+  else
+    local osc = string.format('\027]52;c;%s\a', encoded)
+    vim.fn.chansend(vim.v.stderr, osc)
+    vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
+  end
+end, { desc = 'Send buffer to new Cascade chat' })
 ```
 
 ### 2. Hammerspoon Clipboard Watcher (Mac side)
@@ -65,12 +142,21 @@ end, { desc = 'Send buffer to Cascade' })
 Located at `~/.hammerspoon/init.lua` on the Mac:
 
 - Polls the clipboard every 0.5 seconds
-- Looks for the `::cascade::` prefix
+- Looks for two prefixes:
+  - `::cascade::` - sends to existing Cascade chat
+  - `::cascade-new::` - opens new Cascade chat first
 - When found, strips the prefix and:
-  1. Activates Windsurf
-  2. Presses `Cmd+1` (focus editor, ensures Cmd+L won't toggle-close)
-  3. Presses `Cmd+L` (open Cascade chat input)
-  4. Pastes the text
+
+For `::cascade::` prefix:
+1. Activates Windsurf
+2. Presses `Cmd+1` (focus editor, ensures Cmd+L won't toggle-close)
+3. Presses `Cmd+L` (open Cascade chat input)
+4. Pastes the text
+
+For `::cascade-new::` prefix:
+1. Activates Windsurf
+2. Presses `Cmd+Shift+L` (open new Cascade chat)
+3. Pastes the text
 
 ### 3. Sidekick.nvim Configuration
 
@@ -222,6 +308,7 @@ When sidekick's `mux.enabled = true`, the inner Neovim runs inside a *nested* tm
 
 ## Workflow
 
+### For existing Cascade chat (`<leader>so`):
 1. User opens outer Neovim in tmux
 2. User presses `<leader>sw` to open sidekick's "cascade" tool (inner Neovim)
 3. User writes their prompt in the inner Neovim buffer
@@ -231,17 +318,29 @@ When sidekick's `mux.enabled = true`, the inner Neovim runs inside a *nested* tm
 7. tmux passes it through to Kitty (via SSH)
 8. Kitty updates the Mac's clipboard
 9. Hammerspoon detects the `::cascade::` prefix
-10. Hammerspoon activates Windsurf and pastes into Cascade
+10. Hammerspoon activates Windsurf, focuses editor, presses Cmd+L, and pastes into Cascade
+
+### For new Cascade chat (`<leader>sno`):
+1. User opens outer Neovim in tmux
+2. User presses `<leader>sw` to open sidekick's "cascade" tool (inner Neovim)
+3. User writes their prompt in the inner Neovim buffer
+4. User presses `<Esc>` to enter normal mode, then `<leader>sno`
+5. The buffer content is base64-encoded with `::cascade-new::` prefix
+6. OSC 52 sequence is written directly to the tmux pane's TTY
+7. tmux passes it through to Kitty (via SSH)
+8. Kitty updates the Mac's clipboard
+9. Hammerspoon detects the `::cascade-new::` prefix
+10. Hammerspoon activates Windsurf, presses Cmd+Shift+L to open new chat, and pastes into Cascade
 
 ## Files Involved
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `keymaps.lua` | `~/.config/nvim/lua/keymaps.lua` | `<leader>so` keymap |
+| `keymaps.lua` | `~/.config/nvim/lua/keymaps.lua` | `<leader>so` and `<leader>sno` keymaps |
 | `sidekick.lua` | `~/.config/nvim/lua/plugins/sidekick.lua` | Sidekick config with cascade tool |
 | `cascade-hammerspoon-for-mac.lua` | `~/.config/nvim/lua/cascade-hammerspoon-for-mac.lua` | Reference for Mac's Hammerspoon config |
 | `tmux.conf` | `~/.tmux.conf` | tmux passthrough settings |
-| `init.lua` | `~/.hammerspoon/init.lua` (Mac) | Clipboard watcher |
+| `init.lua` | `~/.hammerspoon/init.lua` (Mac) | Clipboard watcher with dual prefix support |
 
 ## Troubleshooting
 
