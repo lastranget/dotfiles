@@ -188,3 +188,31 @@ vim.keymap.set('n', '<C-q>', function()
     vim.notify('No command to repeat', vim.log.levels.WARN)
   end
 end, { desc = 'Repeat last command' })
+
+-- Send buffer to Windsurf Cascade via OSC 52
+vim.keymap.set('n', '<leader>so', function()
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local text = table.concat(lines, "\n")
+  if text == "" then
+    vim.notify("Buffer is empty", vim.log.levels.WARN)
+    return
+  end
+  local encoded = vim.base64.encode("::cascade::" .. text)
+  
+  if vim.env.TMUX then
+    -- Get the tmux pane's TTY and write OSC 52 directly to it
+    local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
+    if pane_tty ~= '' then
+      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
+      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
+      os.execute(cmd)
+      vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
+    else
+      vim.notify("Could not get tmux pane TTY", vim.log.levels.ERROR)
+    end
+  else
+    local osc = string.format('\027]52;c;%s\a', encoded)
+    vim.fn.chansend(vim.v.stderr, osc)
+    vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
+  end
+end, { desc = 'Send buffer to Cascade' })

@@ -13,6 +13,13 @@ return {
       },
       tools = {
         claude = { cmd = { "claude", "--dangerously-skip-permissions"} },
+        cascade = {
+          cmd = { "nvim" },
+          format = function(text, str)
+            -- Prepend Escape + 'i' to switch to insert mode before inserting text
+            return "\027i" .. str
+          end,
+        },
       },
       prompts = {
         server = "Read and follow the instructions in ~/.claude/dynamic-prompts/nvim-integration.md"
@@ -83,6 +90,12 @@ return {
       "<leader>sc",
       function() require("sidekick.cli").toggle({ name = "claude", focus = true }) end,
       desc = "Sidekick Toggle Claude",
+    },
+    -- Toggle Windsurf Cascade bridge
+    {
+      "<leader>sw",
+      function() require("sidekick.cli").toggle({ name = "cascade", focus = true }) end,
+      desc = "Sidekick Toggle Cascade",
     },
   },
 }
