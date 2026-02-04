@@ -26,8 +26,7 @@ return {
             CASCADE_OUTER_TMUX_PANE = vim.env.TMUX_PANE or "",
           },
           format = function(text, str)
-            -- Prepend Escape + 'i' to switch to insert mode before inserting text
-            return "\027i" .. str
+            return str
           end,
         },
       },

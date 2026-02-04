@@ -1,6 +1,14 @@
 return {
   "sindrets/diffview.nvim",
+  lazy = false,
   opts = {
+    file_panel = {
+      win_config = {
+        position = "left",
+        width = 65,
+        win_opts = {}
+      }
+    },
     view = {
       merge_tool = {
         layout = "diff3_mixed"
