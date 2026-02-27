@@ -13,13 +13,16 @@ return {
   ---@type obsidian.config
 
   dependencies = {
-    'nvim-telescope/telescope.nvim',
+    'folke/snacks.nvim',
     'nvim-treesitter/nvim-treesitter',
     'saghen/blink.cmp',
   },
 
   opts = {
     ui = { enable = false }, -- use render-markdown instead
+    picker = {
+      name = "snacks.pick",
+    },
 
     -- Disable backup files when editing vault files to prevent sync conflicts
     callbacks = {

@@ -3,7 +3,7 @@ return {
     branch = "harpoon2",
     dependencies = {
       "nvim-lua/plenary.nvim",
-      "nvim-telescope/telescope.nvim"
+      "folke/snacks.nvim"
     },
     config = function(_, opts)
       local harpoon = require("harpoon")
@@ -80,45 +80,34 @@ return {
       }))
       -- REQUIRED
 
-      -- basic telescope configuration
-      local conf = require("telescope.config").values
-      local function toggle_telescope(harpoon_files)
-          local file_paths = {}
-          local display_map = {}
+      -- picker configuration for harpoon
+      local function toggle_picker(harpoon_files)
+          local items = {}
 
           for _, item in ipairs(harpoon_files.items) do
               local display = format_file_display(item.value)
-              table.insert(file_paths, display)
-              display_map[display] = item.value
+              table.insert(items, {
+                text = display,
+                file = item.value,
+              })
           end
 
-          require("telescope.pickers").new({}, {
-              prompt_title = "Harpoon",
-              finder = require("telescope.finders").new_table({
-                  results = file_paths,
-              }),
-              previewer = conf.file_previewer({}),
-              sorter = conf.generic_sorter({}),
-              attach_mappings = function(prompt_bufnr, map)
-                local actions = require("telescope.actions")
-                local action_state = require("telescope.actions.state")
-
-                actions.select_default:replace(function()
-                  actions.close(prompt_bufnr)
-                  local selection = action_state.get_selected_entry()
-                  if selection then
-                    local actual_path = display_map[selection[1]]
-                    if actual_path then
-                      vim.cmd("edit " .. vim.fn.fnameescape(actual_path))
-                    end
-                  end
-                end)
-                return true
+          require("snacks").picker.pick({
+              title = "Harpoon",
+              items = items,
+              format = function(item)
+                return {{ item.text }}
               end,
-          }):find()
+              confirm = function(picker, item)
+                picker:close()
+                if item and item.file then
+                  vim.cmd("edit " .. vim.fn.fnameescape(item.file))
+                end
+              end,
+          })
       end
 
-      vim.keymap.set("n", "<leader>fh", function() toggle_telescope(harpoon:list()) end, { desc = "Open harpoon window" })
+      vim.keymap.set("n", "<leader>fh", function() toggle_picker(harpoon:list()) end, { desc = "Open harpoon window" })
       vim.keymap.set("n", "<leader>a", function() harpoon:list():prepend() end, { desc = "Add to harpoon list" })
       vim.keymap.set("n", "<C-s>", function() harpoon.ui:toggle_quick_menu(harpoon:list()) end)
 
