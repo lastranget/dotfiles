@@ -6,6 +6,10 @@ return {
     -- or leave it empty to use the default settings
     -- refer to the configuration section below
   },
+  config = function(_, opts)
+    require("which-key").setup(opts)
+    require("keymap-groups")
+  end,
   keys = {
     {
       "<leader>?",
