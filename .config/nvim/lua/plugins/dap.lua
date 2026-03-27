@@ -313,6 +313,22 @@ return {
             port = 5006,
         })
 
+        table.insert(dap.configurations.java, {
+            type = "java",
+            request = "attach",
+            name = "Attach to Remote (5010)",
+            hostName = "127.0.0.1",
+            port = 5010,
+        })
+
+        table.insert(dap.configurations.java, {
+            type = "java",
+            request = "attach",
+            name = "Attach to Remote (5009)",
+            hostName = "127.0.0.1",
+            port = 5009,
+        })
+
         -- Add to dap.configurations in your dap.lua
         dap.configurations.scala = {
             {

@@ -5,7 +5,7 @@ return {
     file_panel = {
       win_config = {
         position = "left",
-        width = 65,
+        width = 45,
         win_opts = {}
       }
     },

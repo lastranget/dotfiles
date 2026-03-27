@@ -11,7 +11,7 @@ vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.softtabstop = 2
 
-vim.wo.number = false
+vim.wo.number = true
 vim.wo.relativenumber = true
 -- fold settings
 vim.opt.foldmethod = "expr"
@@ -22,14 +22,6 @@ vim.opt.foldcolumn = "4"
 
 vim.g.markdown_folding = 1
 vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rendering that preserves syntax highlighting
-
--- Python-specific fold settings
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = "python",
-  callback = function()
-    vim.opt_local.foldlevelstart = 0
-  end,
-})
 
 -- harpoon and mini.files relative line numbers
 vim.api.nvim_create_autocmd("FileType", {

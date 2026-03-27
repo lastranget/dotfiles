@@ -55,6 +55,13 @@ return {
       desc = "Picker live grep",
     },
     {
+      "<leader>ft",
+      function()
+        require("snacks").picker.grep({ search = vim.fn.expand("<cword>") })
+      end,
+      desc = "Picker grep word under cursor",
+    },
+    {
       "<leader>fb",
       function()
         require("snacks").picker.buffers()
