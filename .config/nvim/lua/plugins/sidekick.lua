@@ -18,6 +18,7 @@ return {
       },
       tools = {
         claude = { cmd = { "claude", "--dangerously-skip-permissions"} },
+        gemini = { cmd = { "gemini", "--yolo" } },
         cascade = {
           cmd = { "nvim" },
           -- Pass outer tmux info so inner nvim can send OSC 52 to the real terminal
@@ -99,6 +100,11 @@ return {
       "<leader>sc",
       function() require("sidekick.cli").toggle({ name = "claude", focus = true }) end,
       desc = "Sidekick Toggle Claude",
+    },
+    {
+      "<leader>sg",
+      function() require("sidekick.cli").toggle({ name = "gemini", focus = true }) end,
+      desc = "Sidekick Toggle Gemini",
     },
     -- Toggle Windsurf Cascade bridge
     {
