@@ -84,17 +84,22 @@ return {
       local function toggle_picker(harpoon_files)
           local items = {}
 
-          for _, item in ipairs(harpoon_files.items) do
-              local display = format_file_display(item.value)
-              table.insert(items, {
-                text = display,
-                file = item.value,
-              })
+          for i = 1, harpoon_files._length do
+              local item = harpoon_files.items[i]
+              if item then
+                local display = format_file_display(item.value)
+                table.insert(items, {
+                  text = display,
+                  file = item.value,
+                })
+              end
           end
 
           require("snacks").picker.pick({
+              source = "harpoon",
               title = "Harpoon",
               items = items,
+              show_empty = true,
               format = function(item)
                 return {{ item.text }}
               end,

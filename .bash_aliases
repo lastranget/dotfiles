@@ -89,7 +89,7 @@ cfg-stage() {
   read -rp "Stage these files? [y/n] " response
   
   if [[ "$response" == "y" ]]; then
-    echo "$files" | xargs cfg add
+    echo "$files" | xargs /usr/bin/git --git-dir="$DOTFILES_DIR/" --work-tree="$HOME" add
     echo "Files staged"
   else
     echo "Cancelled"
