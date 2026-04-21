@@ -125,7 +125,7 @@ vim.keymap.set("n", "<leader>ob", "<cmd>Obsidian backlinks<cr>", {
 vim.keymap.set("n", "<leader>og", "<cmd>Obsidian search<cr>", {
   desc = "Obsidian grep",
 })
-vim.keymap.set("n", "<leader>ot", "<cmd>Obsidian template<cr>", {
+vim.keymap.set("n", "<leader>od", "<cmd>Obsidian template<cr>", {
   desc = "Obsidian template",
 })
 vim.keymap.set("n", "<leader>ol", "<cmd>Obsidian links<cr>", {

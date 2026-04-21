@@ -9,7 +9,7 @@
 - `<leader>oq` Obsidian quick switcher
 - `<leader>ob` Obsidian backlinks
 - `<leader>og` Obsidian grep
-- `<leader>ot` Obsidian template
+- `<leader>od` Obsidian template
 - `<leader>ol` Obsidian links
 - `<leader>on` Obsidian new
 - `<leader>oh` Obsidian tags

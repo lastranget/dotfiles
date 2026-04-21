@@ -49,7 +49,7 @@ alias o=obsidian
 
 # set bash to vi editing mode
 set -o vi
-export EDITOR=vim
+export EDITOR=nvim
 
 # Remove dangling docker images (<none>:<none>)
 docker-prune-dangling() {
