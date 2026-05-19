@@ -18,10 +18,12 @@ vim.opt.foldmethod = "expr"
 vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
 vim.opt.foldlevel = 99
 vim.opt.foldlevelstart = 1
-vim.opt.foldcolumn = "4"
 
 vim.g.markdown_folding = 1
 vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rendering that preserves syntax highlighting
+
+-- xquery filetype detection
+vim.filetype.add({ extension = { xqy = 'xquery', xq = 'xquery', xqm = 'xquery' } })
 
 -- harpoon and mini.files relative line numbers
 vim.api.nvim_create_autocmd("FileType", {

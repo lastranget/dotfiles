@@ -19,11 +19,17 @@ return {
       "<leader>mm",
       function()
         local MiniFiles = require("mini.files")
-        local _ = MiniFiles.close()
-          or MiniFiles.open(vim.api.nvim_buf_get_name(0), false)
-        vim.schedule(function()
-          MiniFiles.reveal_cwd()
-        end)
+        local buf_name = vim.api.nvim_buf_get_name(0)
+        local stat = vim.uv.fs_stat(buf_name)
+        local is_valid = buf_name ~= "" and stat ~= nil
+        if not MiniFiles.close() then
+          if is_valid then
+            MiniFiles.open(buf_name, false)
+          else
+            MiniFiles.open()
+            vim.schedule(function() MiniFiles.reveal_cwd() end)
+          end
+        end
       end,
       desc = "Mini.files open here"
     },
