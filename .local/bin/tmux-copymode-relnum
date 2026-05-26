@@ -4,6 +4,11 @@
 set -euo pipefail
 
 PANE_ID="$1"
+ZOOMED=$(tmux display-message -t "$PANE_ID" -p '#{window_zoomed_flag}')
+
+# Skip gutter if pane is zoomed — no room to split
+[[ "$ZOOMED" == "1" ]] && exit 0
+
 HEIGHT=$(tmux display-message -t "$PANE_ID" -p '#{pane_height}')
 WINDOW_ID=$(tmux display-message -t "$PANE_ID" -p '#{window_id}')
 
