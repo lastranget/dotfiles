@@ -94,6 +94,11 @@ return {
             { " ", "SnacksFooter" },
           },
         },
+        preview = {
+          wo = {
+            foldenable = false,
+          },
+        },
         list = {
           keys = {
             ["?"] = { "toggle_help_list", desc = "Help" },
