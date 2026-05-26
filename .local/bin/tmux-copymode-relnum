@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Opens a narrow side pane with relative line numbers that auto-closes
+# when copy mode is exited. Restores original pane layout on close.
+set -euo pipefail
+
+PANE_ID="$1"
+HEIGHT=$(tmux display-message -t "$PANE_ID" -p '#{pane_height}')
+WINDOW_ID=$(tmux display-message -t "$PANE_ID" -p '#{window_id}')
+
+# Save the current layout so we can restore it after the gutter closes
+LAYOUT=$(tmux display-message -t "$WINDOW_ID" -p '#{window_layout}')
+
+# Open a narrow split to the left, showing line numbers
+# The split monitors the original pane and exits when copy mode ends
+tmux split-window -h -l 3 -b -t "$PANE_ID" bash -c "
+  printf '\033[?25l'
+  seq $HEIGHT -1 1
+  while tmux display-message -t '$PANE_ID' -p '#{pane_mode}' 2>/dev/null | grep -q copy-mode; do
+    sleep 0.5
+  done
+  # Schedule layout restore to run AFTER this pane exits
+  tmux run-shell -b -d 0.1 \"tmux select-layout -t '$WINDOW_ID' '$LAYOUT'\"
+"
+
+# Focus back to the original pane
+tmux select-pane -t "$PANE_ID"
