@@ -112,5 +112,21 @@ return {
       function() require("sidekick.cli").toggle({ name = "cascade", focus = true }) end,
       desc = "Sidekick Toggle Cascade",
     },
+    {
+      "<leader>sz",
+      function()
+        require("sidekick.cli.state").with(function(state)
+          local s = state.session
+          local mux = s.mux_session or (s.parent and s.parent.mux_session)
+          if mux then
+            vim.fn.system({ "tmux", "switch-client", "-t", mux })
+          else
+            vim.notify("No tmux session for " .. state.tool.name, vim.log.levels.WARN)
+          end
+        end, { filter = { attached = true } })
+      end,
+      mode = { "n", "t" },
+      desc = "Switch to Sidekick tmux session",
+    },
   },
 }
