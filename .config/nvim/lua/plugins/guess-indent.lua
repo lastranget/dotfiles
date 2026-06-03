@@ -1,6 +1,6 @@
 return {
   "nmac427/guess-indent.nvim",
-  ft = "xquery",
+  lazy = false,
   opts = {
     auto_cmd = true,
     filetype_exclude = { "netrw", "tutor" },

@@ -1,6 +1,11 @@
 -- after/ftplugin/java.lua
 -- Java-specific configuration using nvim-jdtls with DAP support
 
+vim.opt_local.tabstop = 4
+vim.opt_local.shiftwidth = 4
+vim.opt_local.softtabstop = 4
+vim.opt_local.expandtab = true
+
 local status, jdtls = pcall(require, "jdtls")
 if not status then
     return

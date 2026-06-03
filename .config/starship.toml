@@ -10,6 +10,7 @@ $character\
 $directory\
 [█](fg:bg2 bg:background)\
 $git_branch\
+${custom.worktree}\
 $git_status\
 $package\
 $cmd_duration\
@@ -67,6 +68,19 @@ disabled = false
 [git_branch]
 format = "[ 󰘬 $branch ]($style)"
 style = "bold bg:background fg:purple"
+
+# Shows the worktree directory name only when the cwd is a *linked* git
+# worktree (a linked worktree's git-dir lives under .git/worktrees/<name>; the
+# main checkout's does not). Lets the prompt tell you which worktree you're in
+# beyond just the branch.
+[custom.worktree]
+description = "Show the worktree directory name when inside a linked git worktree"
+when = 'git rev-parse --git-dir 2>/dev/null | grep -q "/worktrees/"'
+command = 'basename "$(git rev-parse --show-toplevel)"'
+format = "[ 󰙅 $output ]($style)"
+style = "bold bg:background fg:orange"
+shell = ["bash", "--noprofile", "--norc"]
+ignore_timeout = true
 
 [git_status]
 conflicted = '🏳️'

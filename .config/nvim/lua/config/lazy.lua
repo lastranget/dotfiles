@@ -21,6 +21,8 @@ vim.opt.rtp:prepend(lazypath)
 
 -- source utils (like repeatable, etc.)
 require("utils")
+-- worktree picker/switcher (see keymaps for <leader>sw)
+require("worktree")
 -- source keymaps
 require("keymaps")
 -- source autocommands

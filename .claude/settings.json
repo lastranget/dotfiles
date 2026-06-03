@@ -1,0 +1,38 @@
+{
+  "model": "opus",
+  "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "light",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ],
+    "ask": [
+      "WebFetch"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "failIfUnavailable": true,
+    "network": {
+      "allowedDomains": [
+      ],
+      "allowLocalBinding": true,
+      "allowUnixSockets": [],
+      "allowAllUnixSockets": false
+    },
+    "filesystem": {
+      "allowRead": ["~/repos/", "~/vaults/Main/"],
+      "denyRead": ["~"]
+    }
+  }
+}

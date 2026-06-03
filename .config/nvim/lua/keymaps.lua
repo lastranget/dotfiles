@@ -173,6 +173,19 @@ vim.keymap.set("n", "<leader>tD", function () vim.diagnostic.open_float() end, {
   desc = "Toggle diagnostic pop-up window",
 })
 
+-- Git worktree picker: switch nvim cwd (and open buffers) to another worktree
+-- of the current repo. Pairs with sidekick — each worktree gets its own CLI
+-- session since sidekick keys the tmux session on cwd.
+vim.keymap.set('n', '<leader>w', function()
+  require('worktree').pick()
+end, { desc = 'Switch git worktree' })
+
+-- Create a new worktree under ~/.worktrees (branch name -> timestamp choice),
+-- then switch into it.
+vim.keymap.set('n', '<leader>W', function()
+  require('worktree').create()
+end, { desc = 'Create git worktree' })
+
 -- Add command to invoke repeatable functions
 vim.keymap.set('n', '<C-q>', function()
   if _G.Repeatable.last_cmd then
@@ -181,95 +194,3 @@ vim.keymap.set('n', '<C-q>', function()
     vim.notify('No command to repeat', vim.log.levels.WARN)
   end
 end, { desc = 'Repeat last command' })
-
--- Send buffer to Windsurf Cascade via OSC 52
-vim.keymap.set('n', '<leader>so', function()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local text = table.concat(lines, "\n")
-  if text == "" then
-    vim.notify("Buffer is empty", vim.log.levels.WARN)
-    return
-  end
-  local encoded = vim.base64.encode("::cascade::" .. text)
-  
-  -- Check if we're in a nested tmux (sidekick cascade tool sets these)
-  local outer_tmux = vim.env.CASCADE_OUTER_TMUX
-  local outer_pane = vim.env.CASCADE_OUTER_TMUX_PANE
-  
-  if outer_tmux and outer_tmux ~= '' then
-    -- We're in nested tmux - use the outer tmux session to get the real TTY
-    local socket = outer_tmux:match("^([^,]+)")  -- Extract socket path from TMUX var
-    local pane_tty = vim.fn.system(
-      string.format("tmux -S %s display-message -t %s -p '#{pane_tty}'", socket, outer_pane)
-    ):gsub('%s+$', '')
-    if pane_tty ~= '' then
-      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
-      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
-      os.execute(cmd)
-      vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
-    else
-      vim.notify("Could not get outer tmux pane TTY", vim.log.levels.ERROR)
-    end
-  elseif vim.env.TMUX then
-    -- Normal tmux (not nested) - get current pane's TTY
-    local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
-    if pane_tty ~= '' then
-      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
-      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
-      os.execute(cmd)
-      vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
-    else
-      vim.notify("Could not get tmux pane TTY", vim.log.levels.ERROR)
-    end
-  else
-    local osc = string.format('\027]52;c;%s\a', encoded)
-    vim.fn.chansend(vim.v.stderr, osc)
-    vim.notify("Sent to Cascade (" .. #text .. " chars)", vim.log.levels.INFO)
-  end
-end, { desc = 'Send buffer to Cascade' })
-
--- Send buffer to Windsurf Cascade in new chat via OSC 52
-vim.keymap.set('n', '<leader>sno', function()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local text = table.concat(lines, "\n")
-  if text == "" then
-    vim.notify("Buffer is empty", vim.log.levels.WARN)
-    return
-  end
-  local encoded = vim.base64.encode("::cascade-new::" .. text)
-  
-  -- Check if we're in a nested tmux (sidekick cascade tool sets these)
-  local outer_tmux = vim.env.CASCADE_OUTER_TMUX
-  local outer_pane = vim.env.CASCADE_OUTER_TMUX_PANE
-  
-  if outer_tmux and outer_tmux ~= '' then
-    -- We're in nested tmux - use the outer tmux session to get the real TTY
-    local socket = outer_tmux:match("^([^,]+)")  -- Extract socket path from TMUX var
-    local pane_tty = vim.fn.system(
-      string.format("tmux -S %s display-message -t %s -p '#{pane_tty}'", socket, outer_pane)
-    ):gsub('%s+$', '')
-    if pane_tty ~= '' then
-      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
-      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
-      os.execute(cmd)
-      vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
-    else
-      vim.notify("Could not get outer tmux pane TTY", vim.log.levels.ERROR)
-    end
-  elseif vim.env.TMUX then
-    -- Normal tmux (not nested) - get current pane's TTY
-    local pane_tty = vim.fn.system("tmux display-message -p '#{pane_tty}'"):gsub('%s+$', '')
-    if pane_tty ~= '' then
-      local osc = string.format('\027Ptmux;\027\027]52;c;%s\a\027\\', encoded)
-      local cmd = string.format("printf '%%s' %s > %s", vim.fn.shellescape(osc), pane_tty)
-      os.execute(cmd)
-      vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
-    else
-      vim.notify("Could not get tmux pane TTY", vim.log.levels.ERROR)
-    end
-  else
-    local osc = string.format('\027]52;c;%s\a', encoded)
-    vim.fn.chansend(vim.v.stderr, osc)
-    vim.notify("Sent to new Cascade chat (" .. #text .. " chars)", vim.log.levels.INFO)
-  end
-end, { desc = 'Send buffer to new Cascade chat' })

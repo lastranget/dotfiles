@@ -99,6 +99,45 @@ cfg-stage() {
 # claude dangerous alias
 alias clauded='claude --dangerously-skip-permissions'
 
+# ---- git worktree helpers (mirror the nvim <leader>w / <leader>W flow) ----
+
+# wt: switch into another worktree of the current repo via an fzf picker.
+# Must be a function (not a script) so the cd affects the current shell.
+wt() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "Not inside a git repository" >&2; return 1; }
+  local line path
+  line=$(git worktree list | fzf --prompt="worktree> " --height=40% --reverse --no-multi) || return
+  path=$(awk '{print $1}' <<<"$line")
+  [[ -n "$path" ]] && cd "$path"
+}
+
+# wtnew <branch> [-t]: create ~/.worktrees/<repo>-<branch>[-<timestamp>] and cd in.
+#   -t appends a YYYYmmdd-HHMMSS stamp to the directory name (branch stays clean),
+#   matching where claude-squad puts its collision-avoidance timestamp.
+# Branches from current HEAD for a new branch, or checks out an existing branch.
+wtnew() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "Not inside a git repository" >&2; return 1; }
+  local branch="$1" stamp=""
+  [[ -z "$branch" ]] && { echo "usage: wtnew <branch> [-t]" >&2; return 1; }
+  [[ "$2" == "-t" ]] && stamp="-$(date +%Y%m%d-%H%M%S)"
+  local repo dir path
+  repo=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
+  dir="${repo}-${branch//\//-}${stamp}"
+  path="$HOME/.worktrees/$dir"
+  mkdir -p "$HOME/.worktrees"
+  if [[ -e "$path" ]]; then
+    echo "Path already exists: $path" >&2; return 1
+  fi
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git worktree add "$path" "$branch" || return
+  else
+    git worktree add -b "$branch" "$path" || return
+  fi
+  cd "$path"
+}
+
 # open neovim with a server
 alias svim='nvim --listen /tmp/nvim'
 
