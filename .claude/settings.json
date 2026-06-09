@@ -1,38 +1,34 @@
 {
-  "model": "opus",
-  "enabledPlugins": {
-    "lua-lsp@claude-plugins-official": true
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
-  "skipDangerousModePermissionPrompt": true,
-  "theme": "light",
   "permissions": {
-    "defaultMode": "acceptEdits",
     "deny": [
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.gnupg/**)",
       "Read(**/.env)",
-      "Read(**/.env.*)"
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/.npmrc)",
+      "Read(**/.netrc)",
+      "Read(**/.bashrc)"
     ],
     "ask": [
       "WebFetch"
+    ],
+    "defaultMode": "default",
+    "additionalDirectories": [
+      "~/vaults/Main"
     ]
   },
-  "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true,
-    "allowUnsandboxedCommands": false,
-    "failIfUnavailable": true,
-    "network": {
-      "allowedDomains": [
-      ],
-      "allowLocalBinding": true,
-      "allowUnixSockets": [],
-      "allowAllUnixSockets": false
-    },
-    "filesystem": {
-      "allowRead": ["~/repos/", "~/vaults/Main/"],
-      "denyRead": ["~"]
-    }
-  }
+  "model": "claude-opus-4-8",
+  "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "light"
 }

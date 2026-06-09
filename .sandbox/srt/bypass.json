@@ -1,0 +1,55 @@
+{
+  "network": {
+    "allowedDomains": ["*.anthropic.com"],
+    "deniedDomains": [],
+    "allowAllUnixSockets": false,
+    "allowLocalBinding": true
+  },
+  "filesystem": {
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.gnupg",
+      "~/.sandbox",
+      "~/.m2/settings.xml",
+      "~/.m2/settings-security.xml",
+      "~/.npmrc",
+      "~/.yarnrc",
+      "~/.yarnrc.yml",
+      "~/.docker/config.json",
+      "~/.netrc",
+      "~/.git-credentials",
+      "~/.gitconfig",
+      "~/.config/gh",
+      "~/.config/gcloud",
+      "~/.config/glab-cli",
+      "~/.kube",
+      "~/.azure",
+      "~/.pypirc",
+      "~/.cargo/credentials.toml",
+      "~/.gradle/gradle.properties",
+      "~/.config/git/credentials",
+      "~/.password-store",
+      "~/.pgpass"
+    ],
+    "denyWrite": [
+      "~/.claude/settings.json",
+      "~/.claude/settings.local.json",
+      "~/.claude/hooks",
+      ".git/hooks",
+      ".git/config"
+    ],
+    "allowWrite": [
+      ".",
+      "~/vaults/Main/",
+      "~/.claude/",
+      "~/.claude.json",
+      "~/.claude.json.backup",
+      "~/.claude.json.lock",
+      "~/.local/state/nvim/",
+      "~/.local/share/nvim/",
+      "~/.cache/nvim/",
+      "/tmp"
+    ]
+  }
+}

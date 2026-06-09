@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#
+# send-winch.sh — nudge sandboxed (srt/bubblewrap) Claude Code processes to
+# re-read the terminal size after a resize or a tmux session switch.
+#
+# srt launches Claude with `bwrap --new-session`, putting it in a new session
+# with no controlling tty (a TIOCSTI terminal-injection mitigation). As a side
+# effect the kernel never delivers SIGWINCH to Claude when its window resizes,
+# so it keeps rendering at its startup dimensions. tmux has already updated the
+# pty's winsize by the time this runs (on resize, or when a client attaches to /
+# switches to the session), so sending SIGWINCH just tells Claude to look at the
+# new value.
+#
+# Usage:
+#   send-winch.sh                signal claude in every pane of the CURRENT tmux
+#                                session (resolved via `tmux display-message`)
+#   send-winch.sh -s SESSION     ... of an explicit tmux session
+#   send-winch.sh PID [PID ...]  ... under these process trees directly
+#
+# Run on the HOST (from tmux key bindings / hooks), not inside the sandbox.
+
+set -u
+
+# Print all descendant PIDs of $1 (host PID view, which sees through the
+# sandbox's PID namespace, so pane -> srt -> bwrap -> ... -> claude stays whole).
+collect() {
+  local p=$1 c
+  for c in $(pgrep -P "$p" 2>/dev/null); do
+    printf '%s\n' "$c"
+    collect "$c"
+  done
+}
+
+roots=()
+if [ "${1:-}" = "-s" ] || [ $# -eq 0 ]; then
+  session=${2:-}
+  if [ -z "$session" ]; then
+    session=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+  fi
+  if [ -z "$session" ]; then
+    echo "send-winch: no tmux session in context" >&2
+    exit 2
+  fi
+  while read -r pp; do
+    [ -n "$pp" ] && roots+=("$pp")
+  done < <(tmux list-panes -s -t "$session" -F '#{pane_pid}' 2>/dev/null)
+else
+  roots=("$@")
+fi
+
+if [ "${#roots[@]}" -eq 0 ]; then
+  echo "send-winch: no target pids"
+  exit 0
+fi
+
+sent=0
+for root in "${roots[@]}"; do
+  while read -r pid; do
+    [ -n "$pid" ] || continue
+    # Match the leaf TUI process (comm == "claude"); the srt/bwrap/socat/sh
+    # wrappers have different names so they're skipped.
+    if [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "claude" ]; then
+      kill -WINCH "$pid" 2>/dev/null && sent=$((sent + 1))
+    fi
+  done < <(collect "$root")
+done
+
+printf 'send-winch: signaled %d claude process(es)\n' "$sent"

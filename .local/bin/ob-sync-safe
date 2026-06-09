@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# ob-sync-safe — `ob sync --continuous` that never uploads local-only folders.
+#
+# Before syncing it guarantees ".git" and "nosync" are in Obsidian Sync's
+# excluded-folders list (preserving any folders you already exclude, e.g.
+# "work"), so the git repo and your local-only scratch folder are never pushed
+# to your Obsidian Sync account.
+#
+# Usage:
+#   ob-sync-safe [vault-path]      # defaults to the current directory
+set -euo pipefail
+
+vault_path="${1:-$PWD}"
+
+# Folders that must always stay local (never synced).
+required_exclusions=(".git" "nosync")
+
+# Current excluded folders, as printed by sync-status ("  Excluded folders: ...")
+excluded="$(ob sync-status --path "$vault_path" 2>/dev/null \
+  | sed -n 's/^[[:space:]]*Excluded folders:[[:space:]]*//p')"
+
+# Normalize to a clean comma-separated list with no spaces for membership testing.
+normalized="$(printf '%s' "$excluded" | tr -d '[:space:]')"
+
+changed=0
+for folder in "${required_exclusions[@]}"; do
+  case ",${normalized}," in
+    *",${folder},"*)
+      : # already excluded — nothing to do
+      ;;
+    *)
+      if [ -n "$normalized" ]; then
+        normalized="${normalized},${folder}"
+      else
+        normalized="${folder}"
+      fi
+      changed=1
+      ;;
+  esac
+done
+
+if [ "$changed" -eq 1 ]; then
+  echo "ob-sync-safe: updating Obsidian Sync excluded folders -> ${normalized}"
+  ob sync-config --path "$vault_path" --excluded-folders "$normalized"
+fi
+
+echo "ob-sync-safe: starting git-safe continuous sync for ${vault_path}"
+exec ob sync --path "$vault_path" --continuous

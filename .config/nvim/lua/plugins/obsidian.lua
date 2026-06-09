@@ -15,7 +15,29 @@ return {
   dependencies = {
     'folke/snacks.nvim',
     'nvim-treesitter/nvim-treesitter',
-    'saghen/blink.cmp',
+  },
+
+  keys = {
+    {
+      "<leader>oN",
+      function()
+        -- Same flow as `:Obsidian new`, but force the note into nosync/fleeting
+        -- instead of the configured `notes_subdir` (work/fleeting).
+        local Note = require("obsidian.note")
+        local id = vim.fn.input("Enter id or path (optional): ")
+        if id == "" then
+          id = nil
+        end
+        local note = Note.create {
+          id = id,
+          dir = "nosync/fleeting",
+          template = Obsidian.opts.note.template,
+        }
+        note:write()
+        note:open { sync = true }
+      end,
+      desc = "Obsidian new fleeting note (nosync)",
+    },
   },
 
   opts = {
@@ -47,7 +69,6 @@ return {
         path = "~/vaults/Main",
       },
     },
-    completion = { blink = true },
     legacy_commands = false,
     templates = {
       folder = "templates",

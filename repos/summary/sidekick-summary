@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Refresh the running-sidekick-sessions report and open the interactive TUI.
+exec python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sidekick_summary.py" "$@"
