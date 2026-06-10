@@ -3,6 +3,9 @@ return {
   version = "*",
   lazy = false,
   priority = 900, -- load after colorscheme (1000) but before most plugins
+  keys = {
+    { "<leader>l", function() require("mini.starter").open() end, desc = "Open starter dashboard" },
+  },
   config = function()
     local starter = require("mini.starter")
 

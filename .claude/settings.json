@@ -23,12 +23,12 @@
       "~/vaults/Main"
     ]
   },
-  "model": "claude-opus-4-8",
   "enabledPlugins": {
     "lua-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "jdtls-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": true,
-  "theme": "light"
+  "theme": "light",
+  "model": "claude-opus-4-8"
 }

@@ -35,6 +35,26 @@ e () {
   fi
 }
 
+# Search current and parent directories for my.env.sh and run it with the supplied options.
+# my.env.sh handles its own output logging (to my.out.out), so no tee here.
+me () {
+  # searches the current directory then all parent directories for the my.env.sh script
+  path=$(pwd)
+  while [[ "$path" != "" && ! -e "$path/my.env.sh" ]]; do
+    path=${path%/*}
+  done
+
+  cmd="$path/my.env.sh"
+  # if the search was successful we will run the script we found
+  if [[ -e "$cmd" ]]; then
+    # echo "running cmd '$cmd $*'"
+    eval "$cmd $* && push_to_mobile.sh $(basename $PWD) done"
+  # if we cannot find it we will print an error message
+  else
+      echo "my.env.sh was not found in the current directory or any parent directory"
+  fi
+}
+
 #lazydocker alias
 alias lzd=lazydocker
 
