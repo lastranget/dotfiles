@@ -1,9 +1,125 @@
 -- plugins/picker.lua
+
+-- State for toggling file search to include gitignored/hidden files
+-- (e.g. generated sources under Maven `target/` dirs). When enabled,
+-- <leader>ff stops respecting .gitignore so build output shows up.
+local target_search = {
+  enabled = false,
+}
+
+-- ── sidekick CLI picker preview ────────────────────────────────────────────
+-- The sidekick tool picker (<leader>ss / <c-space>) is a `vim.ui.select` with
+-- `kind = "sidekick_cli"`, which snacks routes through its `select` source. We
+-- hook it via `picker.kinds.sidekick_cli` below (snacks merges that config on
+-- top of sidekick's, so its nice formatted item list is untouched) to add a
+-- preview: for an option backed by a live tmux session, show a snapshot of that
+-- pane so you can tell what each session is about before attaching.
+--
+-- `tmux capture-pane` grabs the pane at its *current* size, which for a detached
+-- (or otherwise larger) session can be much bigger than the 0.8×0.8 float it'll
+-- reopen into — the snapshot wouldn't match the eventual layout anyway. So we
+-- only show the bottom-left corner (the most recent output, left-aligned),
+-- cropped to the preview window's own size: enough of a clue to identify the
+-- session without pretending to be a faithful render.
+local function sidekick_session_preview(ctx)
+  local preview, item = ctx.preview, ctx.item
+  -- the select finder wraps each tool state as `item.item` (with __index back to
+  -- it as well); fall through to the item itself just in case.
+  local state = item.item or item
+  local session = state and state.session
+
+  preview:reset()
+  preview:minimal()
+
+  local name = (state and state.tool and state.tool.name) or "sidekick"
+
+  if not session then
+    preview:set_title(name)
+    preview:set_lines({
+      "",
+      "  No running session.",
+      "",
+      "  Selecting this starts a fresh one.",
+    })
+    return
+  end
+
+  -- Only tmux-backed sessions can be captured. `tmux_pane_id` is the exact pane;
+  -- fall back to the session name (tmux captures its active pane) or the sid.
+  local backend = session.mux_backend or session.backend
+  local target = session.tmux_pane_id or session.mux_session or session.sid
+  if backend ~= "tmux" or not target then
+    preview:set_title(name)
+    preview:set_lines({ "", "  No tmux pane to preview for this session." })
+    return
+  end
+
+  -- Crop to the preview window so we show the bottom-left corner. Fall back to
+  -- sane defaults if the window isn't sized/valid yet.
+  local win = ctx.win
+  local sized = win and vim.api.nvim_win_is_valid(win)
+  local height = sized and vim.api.nvim_win_get_height(win) or 30
+  local width = sized and vim.api.nvim_win_get_width(win) or 120
+
+  local out = vim.fn.systemlist({ "tmux", "capture-pane", "-p", "-t", target })
+  if vim.v.shell_error ~= 0 then
+    preview:set_title(name)
+    preview:set_lines({ "", "  tmux capture-pane failed for " .. target })
+    return
+  end
+
+  -- Drop trailing blank lines so the *bottom* of our crop is the last real
+  -- output (TUIs leave the lower rows of the pane empty).
+  while #out > 0 and out[#out]:match("^%s*$") do
+    out[#out] = nil
+  end
+
+  -- Bottom: keep only the last `height` lines.
+  if #out > height then
+    out = vim.list_slice(out, #out - height + 1, #out)
+  end
+
+  -- Left: truncate each line to the window width (character-aware) so long
+  -- lines don't push the interesting left edge off-screen.
+  for i, line in ipairs(out) do
+    if vim.fn.strdisplaywidth(line) > width then
+      out[i] = vim.fn.strcharpart(line, 0, width)
+    end
+  end
+
+  if #out == 0 then
+    out = { "", "  (pane is empty)" }
+  end
+
+  local cwd = vim.fn.fnamemodify(session.cwd or "", ":~")
+  preview:set_title(cwd ~= "" and (name .. "  ·  " .. cwd) or name)
+  preview:set_lines(out)
+end
+
 return {
   "folke/snacks.nvim",
   lazy = false, -- Load immediately so sidekick can use picker for its menus
   opts = {
     picker = {
+      -- Per-`vim.ui.select` kind overrides. `sidekick_cli` is the kind the
+      -- sidekick tool picker uses; we attach a tmux-pane preview and unhide the
+      -- preview window (the `select` preset hides it by default), and grow the
+      -- float so the snapshot has room. See sidekick_session_preview above.
+      kinds = {
+        sidekick_cli = {
+          preview = sidekick_session_preview,
+          layout = {
+            preset = "select",
+            hidden = {}, -- unhide the preview window
+            layout = {
+              width = 0.8,
+              max_width = 500, -- lift the select preset's 100-col cap (0 != unlimited)
+              height = 0.8,
+              min_height = 20,
+            },
+          },
+        },
+      },
       -- Sidekick integration actions
       actions = {
         sidekick_send = function(...)
@@ -152,15 +268,43 @@ return {
     {
       "<leader>ff",
       function()
-        require("snacks").picker.files()
+        if target_search.enabled then
+          require("snacks").picker.files({ hidden = true, ignored = true })
+        else
+          require("snacks").picker.files()
+        end
       end,
       desc = "Picker find files",
     },
     {
+      "<leader>fF",
+      function()
+        target_search.enabled = not target_search.enabled
+        require("snacks").notify(
+          target_search.enabled and "File search: including gitignored/hidden (target/ visible)"
+            or "File search: respecting .gitignore",
+          { title = "Picker" }
+        )
+      end,
+      desc = "Picker toggle gitignored/hidden file search",
+    },
+    {
       "<leader>fg",
       function()
-        require("snacks").picker.grep()
+        local mode = vim.fn.mode()
+        if mode == "v" or mode == "V" or mode == "\22" then
+          -- Yank the visual selection into a temp register and grep for it
+          local save = vim.fn.getreg("z")
+          local save_type = vim.fn.getregtype("z")
+          vim.cmd('noautocmd normal! "zy')
+          local selection = vim.fn.getreg("z")
+          vim.fn.setreg("z", save, save_type)
+          require("snacks").picker.grep({ search = selection })
+        else
+          require("snacks").picker.grep()
+        end
       end,
+      mode = { "n", "x" },
       desc = "Picker live grep",
     },
     {

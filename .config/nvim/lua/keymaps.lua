@@ -25,6 +25,35 @@ vim.opt.foldtext = "" -- can look into nvim-ufo if we want more complicated rend
 -- xquery filetype detection
 vim.filetype.add({ extension = { xqy = 'xquery', xq = 'xquery', xqm = 'xquery' } })
 
+-- embed syntax highlighting inside fenced code blocks in markdown,
+-- using the same vim syntax files real source files use (treesitter
+-- highlight module is off, so this is what colors fenced blocks)
+-- languages chosen from an analysis of file types under ~/repos; entries of the
+-- form 'label=syntax' map the fence label to a differently-named vim syntax file
+-- vim.g.markdown_fenced_languages = {
+--   'xquery',
+--   'html',
+--   'java',
+--   'typescript', 'ts=typescript', 'tsx=typescriptreact', 'typescriptreact',
+--   'javascript', 'js=javascript', 'mjs=javascript',
+--   'python', 'py=python',
+--   'css',
+--   'scss',
+--   'less',
+--   'json',
+--   'xml',
+--   'xsd',
+--   'yaml', 'yml=yaml',
+--   'sh', 'bash',
+--   'groovy', 'gradle=groovy',
+--   'cucumber', 'gherkin=cucumber',
+--   'lua',
+--   'toml',
+--   'terraform', 'tf=terraform',
+--   'jproperties', 'properties=jproperties',
+--   'dockerfile',
+-- }
+
 -- harpoon and mini.files relative line numbers
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "mini-files",

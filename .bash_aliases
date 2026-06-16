@@ -119,6 +119,57 @@ cfg-stage() {
 # claude dangerous alias
 alias clauded='claude --dangerously-skip-permissions'
 
+# clauded-srt [dir ...] [-r ROOT] [-- claude-args ...]
+# Launch Claude under srt with the bypass.json profile + --dangerously-skip-permissions.
+# Directories passed as args and/or picked interactively with fzf (Tab to mark
+# several) are merged into filesystem.allowWrite; the rest of the policy
+# (denyRead/denyWrite, network) stays exactly as bypass.json defines it. srt has
+# no flag to inject paths, so we render a temp settings file from bypass.json.
+#   -r ROOT  search root for the fzf picker (default: $CLAUDE_SRT_ROOT or $PWD)
+#   --       everything after is forwarded straight to claude (e.g. --resume)
+clauded-srt() {
+  local base="$HOME/.sandbox/srt/bypass.json"
+  local root="${CLAUDE_SRT_ROOT:-$PWD}"
+  local -a dirs cargs
+
+  while (( $# )); do
+    case "$1" in
+      --) shift; cargs=("$@"); break ;;
+      -r) shift; root="$1"; shift ;;
+      *)  dirs+=("$(realpath -m "$1")"); shift ;;
+    esac
+  done
+
+  # fzf multi-picker for extra writable dirs (Tab: mark, Enter: confirm, Esc: skip).
+  if command -v fzf >/dev/null 2>&1 && command -v fd >/dev/null 2>&1; then
+    local picked
+    picked=$(fd --type d --hidden --exclude .git . "$root" 2>/dev/null \
+      | fzf --multi --height=60% --reverse --prompt="allowWrite> " \
+            --header=$'Tab: mark dirs to add to allowWrite \xc2\xb7 Enter: confirm \xc2\xb7 Esc: skip' \
+            --preview='ls -la {}' --preview-window=right:50%)
+    if [[ -n "$picked" ]]; then
+      while IFS= read -r d; do dirs+=("$(realpath -m "$d")"); done <<<"$picked"
+    fi
+  fi
+
+  local cfg
+  cfg="$(mktemp -t claude-srt.XXXXXX.json)" || return 1
+  trap 'rm -f "$cfg"' RETURN
+
+  if (( ${#dirs[@]} )); then
+    # --args sends positionals (the dirs) to $ARGS.positional; feed the base
+    # config via stdin since --args otherwise swallows the filename argument.
+    jq --args '.filesystem.allowWrite += $ARGS.positional
+               | .filesystem.allowWrite |= unique' \
+       "${dirs[@]}" < "$base" > "$cfg" || return 1
+  else
+    cp "$base" "$cfg" || return 1
+  fi
+
+  echo "srt allowWrite additions: ${dirs[*]:-(none)}" >&2
+  srt --settings "$cfg" claude --dangerously-skip-permissions "${cargs[@]}"
+}
+
 # ---- git worktree helpers (mirror the nvim <leader>w / <leader>W flow) ----
 
 # wt: switch into another worktree of the current repo via an fzf picker.

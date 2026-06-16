@@ -22,11 +22,15 @@ local SKIP_PS_EWW_PROBE = true
 -- same in-container `env` invocation sets COLORTERM=truecolor to restore rich
 -- colors. Both tweaks live here in the wrapper so they travel with any future
 -- env.sh-based build environments.
+--
+-- Like the plain claude tools, this launches with bypass permissions
+-- (--dangerously-skip-permissions appended to every claude invocation).
 local function biofinder_wrap(args)
   local quoted = {}
   for _, a in ipairs(args) do
     quoted[#quoted + 1] = vim.fn.shellescape(a)
   end
+  quoted[#quoted + 1] = "--dangerously-skip-permissions"
   local joined = table.concat(quoted, " ")
   local script = ([[
 bf="$HOME/repos/biofinder"
@@ -48,10 +52,35 @@ end
 -- different sandbox (or use <leader>se, which kills + relaunches for you).
 local SRT_DIR = vim.fn.expand("~/.sandbox/srt")
 
--- Active (default) sandbox: an srt config path, or `false` for "no sandbox".
--- Only <leader>sc changes this; the <leader>se "exchange" picker takes a
--- one-shot sandbox override without touching it.
+-- Sentinel sandbox value meaning "run the clipboard contents as the launch
+-- command" (see override_wrap). A unique table so it can't collide with an srt
+-- config path or `false`.
+local OVERRIDE = setmetatable({}, { __tostring = function() return "override" end })
+
+-- Active (default) sandbox: an srt config path, `false` for "no sandbox", or
+-- OVERRIDE. Only <leader>sc changes this; the <leader>se "exchange" picker takes
+-- a one-shot sandbox override without touching it.
 local sandbox = SRT_DIR .. "/bypass.json"
+
+-- Build a tool command that runs whatever is on the clipboard as the launch
+-- command, read at launch time. Intended for a hand-crafted `srt … claude …`
+-- line copied from elsewhere, but it will run any shell command. Reads the
+-- system clipboard first (wl-paste / xclip / pbpaste), then the tmux
+-- paste-buffer. SIDEKICK_TOOL still rides the tmux session env, so is_proc
+-- classification keeps working regardless of what the clipboard command is.
+local function override_wrap()
+  local lines = {
+    [[cmd="$(wl-paste 2>/dev/null || xclip -o -selection clipboard 2>/dev/null || pbpaste 2>/dev/null)"]],
+    [[[ -z "$cmd" ] && cmd="$(tmux show-buffer 2>/dev/null)"]],
+    [[if [ -z "$cmd" ]; then]],
+    [[  echo "claude override: clipboard is empty."]],
+    [[  echo "Copy a full launch command (e.g. srt --settings … claude …) first."]],
+    [[  printf 'Press enter to close.'; read _; exit 1]],
+    [[fi]],
+    [[exec sh -c "$cmd"]],
+  }
+  return { "sh", "-c", table.concat(lines, "\n") }
+end
 
 -- Full argv for a plain `claude` launch. `args` are claude arguments after the
 -- binary name (empty for a fresh session). `sb` is the sandbox to use: pass nil
@@ -61,6 +90,9 @@ local sandbox = SRT_DIR .. "/bypass.json"
 local function claude_argv(args, sb)
   if sb == nil then
     sb = sandbox
+  end
+  if sb == OVERRIDE then
+    return override_wrap()
   end
   local argv = {}
   if sb then
@@ -89,6 +121,9 @@ end
 local function claude_resume_wrap(use_env, sb, sid)
   if sb == nil then
     sb = sandbox
+  end
+  if sb == OVERRIDE then
+    return override_wrap()
   end
   local lines = {}
   if sid then
@@ -132,6 +167,9 @@ local function sandbox_label(sb)
   if sb == nil then
     sb = sandbox
   end
+  if sb == OVERRIDE then
+    return "override"
+  end
   if sb == false then
     return "no sandbox"
   end
@@ -160,7 +198,7 @@ end
 -- launch (<leader>sr / <leader>sb / <leader>se) temporarily overrode its cmd.
 local function apply_sandbox()
   local label = sandbox_label(sandbox)
-  for _, name in ipairs({ "claude", "claudeB", "claudeC", "claudeD", "claudeE" }) do
+  for _, name in ipairs({ "claudeA", "claudeB", "claudeC", "claudeD", "claudeE" }) do
     set_tool_launch(name, claude_argv({}), label)
   end
   set_tool_launch("claude_env", biofinder_wrap({ "claude" }), "biofinder env")
@@ -193,18 +231,20 @@ local function terminal_title(terminal)
   end
 end
 
--- srt config chooser. Lists every *.json under ~/.sandbox/srt by basename plus
--- a "no sandbox" entry, marks the active default, and calls `cb(value, label)`
--- with the chosen srt config path (or `false` for no sandbox). Not called if
--- the picker is cancelled. The picker itself never mutates `sandbox`.
+-- srt config chooser. Lists every *.json under ~/.sandbox/srt by basename, plus
+-- "no sandbox" and "override" entries, marks the active default, and calls
+-- `cb(value, label)` with the chosen srt config path, `false` (no sandbox), or
+-- OVERRIDE (run the clipboard as the command). Not called if the picker is
+-- cancelled. The picker itself never mutates `sandbox`.
 local function select_sandbox(prompt, cb)
-  local items = {} ---@type { label: string, value: string|false }[]
+  local items = {} ---@type { label: string, value: string|false|table }[]
   local files = vim.fn.glob(SRT_DIR .. "/*.json", false, true)
   table.sort(files)
   for _, f in ipairs(files) do
     items[#items + 1] = { label = vim.fn.fnamemodify(f, ":t:r"), value = f }
   end
   items[#items + 1] = { label = "no sandbox", value = false }
+  items[#items + 1] = { label = "override (clipboard command)", value = OVERRIDE }
   vim.ui.select(items, {
     prompt = prompt,
     format_item = function(item)
@@ -317,21 +357,34 @@ end
 -- ── resume / continue / exchange launchers ────────────────────────────────
 -- Claude tool slots that can host a resumed/continued session. claude_agents
 -- is excluded (it runs the `claude agents` subcommand, not a chat session).
-local RESUMABLE = { "claude", "claudeB", "claudeC", "claudeD", "claudeE", "claude_env" }
+local RESUMABLE = { "claudeA", "claudeB", "claudeC", "claudeD", "claudeE", "claude_env" }
 
 -- Launch `name` with a one-shot `cmd` (titled `label`), then restore every
--- tool's default cmd. The temp cmd is read synchronously when the session
--- spawns (during toggle's scheduled work), so the deferred apply_sandbox() only
--- runs afterwards and never clobbers it. Note: sidekick reattaches to an
--- already-running session and ignores cmd, so this only takes effect for an
--- empty slot (the exchange flow kills the old session first).
+-- tool's default cmd.
+--
+-- We attach a tool-only state directly instead of `cli.toggle({ name })`. toggle
+-- routes through State.with, whose attach path falls back to a *tool-name*
+-- filtered picker whenever no session of that name is currently attached — and
+-- that filter ignores cwd, so same-named sessions running in other directories
+-- show up too (the exact bug here: <leader>se kills this cwd's session, leaving
+-- 0 attached, then the relaunch prompts with claudeA sessions from elsewhere).
+-- State.attach on a `{ tool = … }` state with no session always spawns a fresh
+-- session, pinned to the current cwd (Session.new → M.cwd), with no picker.
+--
+-- Config.get_tool() deep-copies the tool config — including the cmd/env we just
+-- baked via set_tool_launch — into the session's own `tool`, so the one-shot cmd
+-- is captured immutably at attach time. The deferred apply_sandbox() then resets
+-- the shared config for future launches without ever touching this session.
 local function launch_with_cmd(name, cmd, label)
-  local tools = require("sidekick.config").cli.tools
-  if not tools[name] then
+  local Config = require("sidekick.config")
+  if not Config.cli.tools[name] then
     return
   end
   set_tool_launch(name, cmd, label)
-  require("sidekick.cli").toggle({ name = name, focus = true })
+  require("sidekick.cli.state").attach(
+    { tool = Config.get_tool(name) },
+    { show = true, focus = true }
+  )
   vim.schedule(apply_sandbox)
 end
 
@@ -387,7 +440,11 @@ local function exchange_sandbox()
   end
   local name = chosen.tool.name
   select_sandbox("reload " .. name .. " (--resume) into sandbox…", function(sb)
-    clipboard_copy(sid) -- side effect, matching <leader>sy
+    -- "override" runs the clipboard verbatim, so don't clobber it with the sid;
+    -- otherwise copy the sid (matching <leader>sy) for the --resume relaunch.
+    if sb ~= OVERRIDE then
+      clipboard_copy(sid)
+    end
     local s = chosen.session
     local mux = s.mux_session or (s.parent and s.parent.mux_session)
     -- tear down the running session: close the nvim terminal, then destroy the
@@ -442,23 +499,23 @@ return {
         enabled = true,
       },
       tools = {
-        -- All three variants run the same `claude` binary, so the default
-        -- `\<claude\>` command-line match can't tell a reattached session
-        -- apart. Instead we stamp each launch with a unique SIDEKICK_TOOL env
-        -- var (sidekick passes `tool.env` to the tmux session) and match on it.
-        claude = {
+        -- Every slot runs the same `claude` binary, so a command-line match
+        -- (`\<claude\>`) can't tell reattached sessions apart. Instead each
+        -- launch is stamped with a unique SIDEKICK_TOOL env var (sidekick passes
+        -- `tool.env` to the tmux session) and is_proc matches on that exactly.
+        --
+        -- The primary slot is named `claudeA` (not `claude`) on purpose: a slot
+        -- literally named `claude` is tempting to match with the broad
+        -- `\<claude\>` regex "to also catch untagged sessions", but that regex
+        -- matches *any* claude process — external tmux sessions, legacy/manual
+        -- launches, other slots' resume wrappers — so `<leader>se`'s kill +
+        -- relaunch would resolve the empty slot ambiguously against those live
+        -- sessions and pop a picker. An exact SIDEKICK_TOOL match, like every
+        -- other slot, keeps `claudeA` unambiguous.
+        claudeA = {
           cmd = claude_argv({}),
-          env = { SIDEKICK_TOOL = "claude" },
-          is_proc = function(_, p)
-            local marker = (p.env or {}).SIDEKICK_TOOL
-            if marker == "claudeB" or marker == "claudeC" or marker == "claudeD"
-              or marker == "claudeE" or marker == "claude_env"
-              or marker == "claude_agents" then
-              return false
-            end
-            -- still match plain claude (incl. sessions started before this env existed)
-            return vim.regex("\\<claude\\>"):match_str(p.cmd) ~= nil
-          end,
+          env = { SIDEKICK_TOOL = "claudeA" },
+          is_proc = function(_, p) return (p.env or {}).SIDEKICK_TOOL == "claudeA" end,
         },
         claudeB = {
           cmd = claude_argv({}),
@@ -512,12 +569,23 @@ return {
         nosync_note = "Make a markdown document and put it in ~/vaults/Main/work/fleeting/",
         improve = "Are there any obvious ways to do what I'm intending to better than how I pitched the implementation?",
         jira_links = "Enhance any Jira epic or story IDs (e.g. BFV2-4241, SETI-2037) into full markdown links pointing to https://acs-cas.atlassian.net/browse/<ID>, then use the Atlassian MCP to fetch each issue and append a 1-2 sentence description (summary, type, and status) after the link.",
-        add_prompt = "Add a prompt to the prompt list in ~/.config/nvim/lua/plugins/sidekick.lua that (in a sentence (or two, max)) explains to: "
+        add_prompt = "Add a prompt to the prompt list in ~/.config/nvim/lua/plugins/sidekick.lua that (in a sentence (or two, max)) explains to: ",
+        line_by_line = "Explain {selection}. Teach me what it does with a line by line visual with explanation to the right of each line.",
+        explain_marklogic_note = "Add {selection} to \"Explaned Marklogic functions.md\" in ~/vaults/Main per the instructions in the document"
       }
     },
   },
   config = function(_, opts)
     require("sidekick").setup(opts)
+
+    -- Drop sidekick's stock `claude` tool. There's no built-in disable flag:
+    -- the default `tools` table hardcodes `claude = {}` and setup() deep-merges
+    -- opts on top (keys are never removed), and setting `claude = false` doesn't
+    -- help because tool.get() coerces it back via `Config.cli.tools[name] or {}`.
+    -- We run our own slot as `claudeA` (exact SIDEKICK_TOOL match), so the stock
+    -- `claude` is just a redundant, broad-matching duplicate in the picker.
+    -- Deleting the key after setup is what removes it from pairs() iteration.
+    require("sidekick.config").cli.tools.claude = nil
 
     -- Stamp the active sandbox label into every Claude tool's cmd/env up front,
     -- so even a first launch (before any <leader>sc pick) carries SIDEKICK_SANDBOX
@@ -676,6 +744,8 @@ return {
       function() require("sidekick.cli").select() end,
       -- Or to select only installed tools:
       -- require("sidekick.cli").select({ filter = { installed = true } })
+      -- Normal-mode only: a "t"-mode <leader> mapping intercepts the space bar
+      -- while you're typing in the claude terminal, so leave it off here.
       desc = "Select CLI",
     },
     {
@@ -721,16 +791,19 @@ return {
       function() pick_continue() end,
       desc = "Sidekick: continue most recent Claude session into a slot",
     },
+    -- NOTE: these stay normal-mode only (no "t"). A "t"-mode <leader> mapping
+    -- intercepts the space bar while you're typing in the claude terminal, so
+    -- e.g. "<space>se" fires the chord instead of reaching claude. Only
+    -- <c-space> is bound in terminal mode (above) so the toggle still works
+    -- while typing; switch to normal mode (<c-q>) to use these in a session.
     {
       "<leader>se",
       function() exchange_sandbox() end,
-      mode = { "n", "t" },
       desc = "Sidekick: reload attached Claude session into another sandbox",
     },
     {
       "<leader>sy",
       function() copy_claude_session_id() end,
-      mode = { "n", "t" },
       desc = "Copy attached Claude session id",
     },
     {
@@ -761,6 +834,9 @@ return {
           end
         end, { filter = { attached = true } })
       end,
+      -- Bound in terminal mode too (unlike the other <leader>s* session
+      -- commands): the whole point is to jump from the claude float into the
+      -- tmux session, which you do while typing in the terminal.
       mode = { "n", "t" },
       desc = "Switch to Sidekick tmux session",
     },

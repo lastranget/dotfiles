@@ -23,12 +23,14 @@
       "~/vaults/Main"
     ]
   },
+  "model": "claude-opus-4-8[1m]",
   "enabledPlugins": {
     "lua-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "jdtls-lsp@claude-plugins-official": true
   },
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
-  "theme": "light",
-  "model": "claude-opus-4-8"
+  "theme": "light"
 }
