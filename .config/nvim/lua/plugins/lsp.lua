@@ -267,6 +267,26 @@ return {
 				-- Structure is identical to the mason table from above.
 				others = {
 					-- dartls = {},
+
+					-- XQuery LSP (xq-lsp) — installed manually via npm, NOT Mason:
+					--   npm install -g xq-lsp        (resolves through the CAS Artifactory proxy)
+					-- It's a stdio language server (vscode-languageserver based) giving
+					-- diagnostics, hover, completion, signature help, document symbols,
+					-- go-to-definition and code actions for XQuery.
+					-- Neovim natively maps .xq/.xql/.xqm/.xqy/.xquery -> filetype `xquery`
+					-- (see :h ft-xquery), so this auto-attaches just like the Mason servers:
+					-- the loop below registers it with vim.lsp.config() and the
+					-- `vim.lsp.enable(others)` call wires up the FileType autostart.
+					xqlsp = {
+						cmd = { "xq-lsp", "--stdio" },
+						filetypes = { "xquery" },
+						-- `lsp-config.xq` is xq-lsp's own project config file; the build-tool
+						-- markers root at the actual module (e.g. the MarkLogic gradle project),
+						-- and `.git` is the last-resort fallback. Order is priority in nvim 0.11:
+						-- earlier markers win even if a later one sits in a nearer directory, so
+						-- `.git` goes last to avoid rooting at an outer git-worktree root.
+						root_markers = { "lsp-config.xq", "gradle.properties", "build.gradle", "pom.xml", ".git" },
+					},
 				},
 			}
 

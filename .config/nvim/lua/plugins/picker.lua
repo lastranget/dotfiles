@@ -137,6 +137,22 @@ return {
 
           local source = picker.opts.source or ""
 
+          -- The sidekick CLI tool picker (<c-space> / <leader>ss) is a
+          -- `vim.ui.select` with kind "sidekick_cli", which snacks runs under the
+          -- "select" source. Each row's `item.item` is a sidekick.cli.State (a
+          -- table with a `.tool`); rows for a live session also carry it as
+          -- `state.session`. Detect that picker so <C-d> can kill those sessions.
+          local function is_sidekick_cli()
+            if source ~= "select" then return false end
+            for _, item in ipairs(selected) do
+              local st = item.item
+              if type(st) == "table" and type(st.tool) == "table" and st.tool.name then
+                return true
+              end
+            end
+            return false
+          end
+
           if source == "harpoon" then
             local harpoon = require("harpoon")
             local list = harpoon:list()
@@ -169,6 +185,68 @@ return {
               end
             end
             picker:refresh()
+          elseif is_sidekick_cli() then
+            -- Kill the tmux session(s) behind the highlighted/selected rows. Rows
+            -- for not-yet-started tools (no `state.session`) have nothing to kill
+            -- and are skipped. Prefer `kill-pane` over `kill-session`: for this
+            -- setup's dedicated one-pane sessions it destroys the session all the
+            -- same, but in an external window/split layout it removes only the
+            -- claude pane and spares any siblings sharing that tmux session.
+            if vim.fn.executable("tmux") ~= 1 then
+              Snacks.notify.warn("tmux not available; cannot kill sessions", { title = "Snacks Picker" })
+              return
+            end
+            local Terminal = require("sidekick.cli.terminal")
+            local killed = {} ---@type table<string, boolean> killed session sids
+            local n, skipped = 0, 0
+            for _, item in ipairs(selected) do
+              local state = item.item or item
+              local session = type(state) == "table" and state.session or nil
+              if session and (session.mux_backend or session.backend) == "tmux" then
+                local pane = session.tmux_pane_id
+                local cmd = pane and { "tmux", "kill-pane", "-t", pane }
+                  or { "tmux", "kill-session", "-t", session.mux_session or session.sid }
+                vim.fn.system(cmd)
+                if vim.v.shell_error == 0 then
+                  killed[session.sid] = true
+                  n = n + 1
+                  -- if we're still attached to it, tear down the (now orphaned)
+                  -- nvim float too — same teardown <leader>se uses.
+                  local term = Terminal.get("terminal: " .. session.sid)
+                  if term then
+                    pcall(function() term:close() end)
+                  end
+                end
+              elseif session then
+                skipped = skipped + 1 -- a live session we don't know how to kill
+              end
+            end
+
+            if n == 0 then
+              Snacks.notify.warn(
+                skipped > 0 and "Selected session(s) aren't tmux-backed; cannot kill"
+                  or "No running session under the cursor to kill",
+                { title = "Snacks Picker" }
+              )
+              return
+            end
+
+            -- The select source's finder is a static list, so a plain refresh
+            -- would redraw the killed rows. Rebuild it without them, then refresh.
+            local kept = {}
+            for _, it in ipairs(picker.finder.items) do
+              local st = it.item
+              local sess = type(st) == "table" and st.session or nil
+              if not (sess and killed[sess.sid]) then
+                kept[#kept + 1] = it
+              end
+            end
+            picker.finder._find = function() return kept end
+            picker:refresh()
+            Snacks.notify.info(
+              ("Killed %d session%s"):format(n, n == 1 and "" or "s"),
+              { title = "Snacks Picker" }
+            )
           else
             Snacks.notify.warn("Delete not supported for this picker", { title = "Snacks Picker" })
           end
