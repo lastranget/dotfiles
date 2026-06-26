@@ -8,13 +8,20 @@
 -- from neovim without Dataview:
 --
 --   <leader>on / <leader>oN  new note  → template picker → name → MOC parent picker
---   <leader>op               MOC swap  → re-parent notes OFF the current MOC onto others
---   <leader>oP               add parent → add a MOC to any notes' parents
+--   <leader>op               add parent → add MOC(s) to the current note's parents
+--   <leader>oS               MOC swap  → re-parent notes OFF the current MOC onto others
+--   <leader>oP               add parent → add MOC(s) to picked notes' parents
 --   <leader>org / :ObsLint    generate the vault hygiene report
 --   <leader>or{o,u,d,b,m}     picker per lint category (orphans/untyped/desc/broken/malformed)
 --   <leader>or{O,U,D,B,M}     resolve that category (assign parent/type/description, fix/open)
 --   <leader>ow / :ObsWeedy    weedy triage queue
 --   <leader>oa / oA          insert #tag(s) at cursor / add tag(s) to frontmatter
+--   <leader>om / oQ          MOC quick-switch (breadcrumb picker; subtree-aware)
+--   <leader>ov / oV          move current file / picked files to a directory
+--   <leader>oq / ob / ol     note pickers (all notes / backlinks / outgoing links)
+--   <leader>oB               parent-backlinks (notes that declare this note a parent)
+-- Any picker that opens notes: Enter opens the highlighted one; Tab marks several,
+-- which are then added to the buffer list in the background (open_notes).
 --
 -- Frontmatter is read and rewritten through obsidian.nvim's OWN yaml module
 -- (`obsidian.yaml` + `obsidian.frontmatter`) rather than hand-rolled string
@@ -278,7 +285,7 @@ local function rg_files_matching(pattern, fixed)
   return nonempty(vim.fn.systemlist(cmd))
 end
 
--- Every note tagged `type/moc`. Returns { path, stem, display, link }.
+-- Every note tagged `type/moc`. Returns { path, stem, display, link, parents, refids }.
 local function collect_mocs()
   local mocs = {}
   for _, path in ipairs(rg_files_matching("type/moc")) do
@@ -289,7 +296,14 @@ local function collect_mocs()
       if type(fm.data.aliases) == "table" and type(fm.data.aliases[1]) == "string" then
         display = fm.data.aliases[1]
       end
-      mocs[#mocs + 1] = { path = path, stem = stem, display = display, link = "[[" .. stem .. "]]" }
+      mocs[#mocs + 1] = {
+        path = path,
+        stem = stem,
+        display = display,
+        link = "[[" .. stem .. "]]",
+        parents = (type(fm.data.parents) == "table") and fm.data.parents or {},
+        refids = note_ref_ids(path, fm.data),
+      }
     end
   end
   table.sort(mocs, function(a, b)
@@ -298,10 +312,50 @@ local function collect_mocs()
   return mocs
 end
 
+-- Picker items for MOCs, each labelled with its ancestor breadcrumb, e.g.
+-- "tui moc  ⟵ computer moc  ⟵ home". The breadcrumb is also the match text, so
+-- typing an ancestor's name (e.g. "computer") keeps that MOC's whole subtree in
+-- the list: the MOC whose own name matches sorts first (match at the start gets
+-- fzf's first-char bonus), and its descendants rank below it, roughly by depth
+-- (the match falls further right in longer breadcrumbs).
 local function moc_items(mocs)
+  local by_refid = {}
+  for _, m in ipairs(mocs) do
+    for id in pairs(m.refids or {}) do
+      by_refid[id] = by_refid[id] or m
+    end
+  end
+  -- Walk a MOC's parent chain upward (cycle-guarded), collecting ancestor names.
+  local function lineage(m)
+    local chain, seen, cur = {}, { [m.path] = true }, m
+    while true do
+      local up
+      for _, e in ipairs(cur.parents or {}) do
+        local t = link_target(e)
+        local pm = t and by_refid[t] or nil
+        if pm and not seen[pm.path] then
+          up = pm
+          break
+        end
+      end
+      if not up then
+        break
+      end
+      seen[up.path] = true
+      chain[#chain + 1] = up.display
+      cur = up
+    end
+    return chain
+  end
+
   local items = {}
   for _, m in ipairs(mocs) do
-    items[#items + 1] = { text = m.display .. "  ·  " .. relpath(m.path), file = m.path, moc = m }
+    local chain = lineage(m)
+    local text = m.display
+    if #chain > 0 then
+      text = text .. "  ⟵ " .. table.concat(chain, "  ⟵ ")
+    end
+    items[#items + 1] = { text = text, name = m.display, file = m.path, moc = m }
   end
   return items
 end
@@ -483,12 +537,23 @@ end
 -- operates on just that item; <Tab> marks several (see plugins/picker.lua), then
 -- <Enter> operates on the whole marked set. Single-select pickers confirm the
 -- item under the cursor.
+-- Picker line formatter: a MOC item (which carries `.name`) shows its own name
+-- in the normal colour and the rest of its breadcrumb (parents + arrows) dimmed;
+-- every other item renders as plain text. snacks overlays match highlights on top.
+local function picker_format(item)
+  local name, text = item.name, item.text or ""
+  if name and #text > #name then
+    return { { name }, { text:sub(#name + 1), "SnacksPickerDimmed" } }
+  end
+  return { { text } }
+end
+
 local function pick(o)
   require("snacks").picker.pick({
     source = o.source,
     title = o.title,
     items = o.items,
-    format = "text",
+    format = picker_format,
     -- Preview the highlighted item's file content by default (every note/file
     -- item carries `file`). Callers override (e.g. "directory") when items aren't notes.
     preview = o.preview or "file",
@@ -507,6 +572,28 @@ local function pick(o)
       end)
     end,
   })
+end
+
+-- Open picked notes: a single selection is opened (focused); multiple selections
+-- are added to the buffer list in the background so you can :bnext through them.
+local function open_notes(items)
+  if not items or #items == 0 then
+    return
+  end
+  if #items == 1 then
+    if items[1].file then
+      vim.cmd.edit(vim.fn.fnameescape(items[1].file))
+    end
+    return
+  end
+  local n = 0
+  for _, it in ipairs(items) do
+    if it.file then
+      vim.cmd("badd " .. vim.fn.fnameescape(it.file))
+      n = n + 1
+    end
+  end
+  vim.notify(("Opened %d notes in the background — :bnext to iterate"):format(n), vim.log.levels.INFO)
 end
 
 -- ── new note with parent MOC(s) ──────────────────────────────────────────────
@@ -729,13 +816,8 @@ local function moc_tree()
         source = "obs_moctree_notes",
         title = ("Subtree of %d MOC(s) · %d notes · %.0fms"):format(#roots, #items, ms),
         items = items,
-        multi = false,
-        on_choice = function(sel)
-          local it = sel[1]
-          if it and it.file then
-            vim.cmd.edit(vim.fn.fnameescape(it.file))
-          end
-        end,
+        multi = true,
+        on_choice = open_notes,
       })
     end,
   })
@@ -752,13 +834,17 @@ local function lint_scan()
     return p ~= report_abs
   end, vault_md_files())
 
-  local parsed, refset = {}, {}
+  local parsed, refset, path_of, is_moc = {}, {}, {}, {}
   for _, p in ipairs(files) do
     local fm = read_fm(p)
     parsed[p] = fm
     if fm then
+      if type(fm.data.tags) == "table" and vim.tbl_contains(fm.data.tags, "type/moc") then
+        is_moc[p] = true
+      end
       for id in pairs(note_ref_ids(p, fm.data)) do
         refset[id] = true
+        path_of[id] = path_of[id] or p
       end
     end
   end
@@ -771,16 +857,18 @@ local function lint_scan()
     else
       local d = fm.data
 
-      local has_parent = false
+      -- "orphan" = a non-MOC note with no parent that resolves to a type/moc note.
+      local has_moc_parent = false
       if type(d.parents) == "table" then
         for _, e in ipairs(d.parents) do
           local tgt = link_target(e)
-          if tgt and tgt ~= "" then
-            has_parent = true
+          local pp = (tgt and tgt ~= "") and path_of[tgt] or nil
+          if pp and is_moc[pp] then
+            has_moc_parent = true
           end
         end
       end
-      if not has_parent then
+      if not is_moc[p] and not has_moc_parent then
         cats.orphans[#cats.orphans + 1] = p
       end
 
@@ -854,7 +942,7 @@ local function obs_lint()
     ("Scanned %d notes."):format(scanned),
     "",
   }
-  vim.list_extend(lines, section("Orphans (no parent)", cats.orphans, linkify))
+  vim.list_extend(lines, section("Orphans (no MOC parent)", cats.orphans, linkify))
   vim.list_extend(lines, section("Untyped (no type/*)", cats.untyped, linkify))
   vim.list_extend(lines, section("Missing / boilerplate description", cats.no_desc, linkify))
   vim.list_extend(lines, section("Broken parent links", cats.broken, function(it)
@@ -900,15 +988,10 @@ local function lint_pick(paths, title)
   end
   pick({
     source = "obs_lint_pick",
-    title = title .. " — Enter to open",
+    title = title .. " — Enter opens; Tab marks several to open in background",
     items = path_items(paths),
-    multi = false,
-    on_choice = function(sel)
-      local it = sel[1]
-      if it and it.file then
-        vim.cmd.edit(vim.fn.fnameescape(it.file))
-      end
-    end,
+    multi = true,
+    on_choice = open_notes,
   })
 end
 
@@ -956,10 +1039,10 @@ end
 -- ── lint group: pickers (lowercase) + resolvers (capital) ────────────────────
 
 local function lint_orphans()
-  lint_pick((lint_scan()).orphans, "Orphans (no parent)")
+  lint_pick((lint_scan()).orphans, "Orphans (no MOC parent)")
 end
 local function lint_orphans_fix()
-  lint_resolve((lint_scan()).orphans, "Orphans → pick notes (Tab=multi), then add parent MOC(s)", function(notes)
+  lint_resolve((lint_scan()).orphans, "Orphans (no MOC parent) → pick notes (Tab=multi), then add parent MOC(s)", function(notes)
     pick_targets_and_apply(notes, nil, "add")
   end)
 end
@@ -1045,11 +1128,7 @@ end
 -- (as buffers) so you can fix the frontmatter by hand and :bnext through them.
 local function lint_malformed_fix()
   lint_resolve((lint_scan()).malformed, "Malformed → pick notes to open for hand-fixing", function(notes)
-    for _, it in ipairs(notes) do
-      vim.cmd("badd " .. vim.fn.fnameescape(it.file))
-    end
-    vim.cmd.edit(vim.fn.fnameescape(notes[1].file))
-    vim.notify(("Opened %d malformed note(s) — fix the YAML by hand (:bnext)"):format(#notes), vim.log.levels.INFO)
+    open_notes(notes)
   end)
 end
 
@@ -1106,15 +1185,10 @@ local function obs_weedy()
 
   pick({
     source = "obs_weedy",
-    title = ("Weedy queue (%d) — oldest first"):format(#items),
+    title = ("Weedy queue (%d) — oldest first; Tab marks several to open in background"):format(#items),
     items = items,
-    multi = false,
-    on_choice = function(sel)
-      local it = sel[1]
-      if it and it.file then
-        vim.cmd.edit(vim.fn.fnameescape(it.file))
-      end
-    end,
+    multi = true,
+    on_choice = open_notes,
   })
 end
 
@@ -1192,7 +1266,7 @@ local function move_current_file()
   end
   pick({
     source = "obs_move_dir",
-    title = "Move " .. vim.fn.fnamemodify(src, ":t") .. " to — Enter to confirm",
+    title = "Move " .. relpath(src) .. " to — Enter to confirm",
     items = dir_items(),
     preview = "directory",
     multi = false,
@@ -1248,9 +1322,10 @@ local function move_files()
   })
 end
 
--- <leader>od / <leader>oD — open (creating if needed) today's daily log from the
--- Log template, under work/daily or daily, foldered by year / abbreviated month
--- (e.g. daily/2026/Jun/2026-06-25.md). The Log template's {{date}} fills in.
+-- <leader>od / <leader>oD — open (creating if needed) today's daily log, under
+-- work/daily or daily, foldered by year / abbreviated month
+-- (e.g. daily/2026/Jun/2026-06-25.md). Work logs use the "Work Log" template,
+-- personal logs use "Log"; the template's {{date}} fills in.
 local function open_daily(work)
   local dir = (work and "work/daily" or "daily") .. "/" .. os.date("%Y") .. "/" .. os.date("%b")
   local id = os.date("%Y-%m-%d")
@@ -1259,7 +1334,7 @@ local function open_daily(work)
     vim.cmd.edit(vim.fn.fnameescape(abs))
     return
   end
-  local note = require("obsidian.note").create({ id = id, dir = dir, template = "Log" })
+  local note = require("obsidian.note").create({ id = id, dir = dir, template = (work and "Work Log" or "Log") })
   note:write({})
   note:open({ sync = true })
 end
@@ -1393,6 +1468,226 @@ local function add_tags_to_frontmatter()
   end)
 end
 
+-- <leader>op — add parent MOC(s) to the CURRENT note (no note picker; operates on
+-- the focused buffer, live, so unsaved edits are kept). Like <leader>oP scoped to
+-- this one note: keeps existing real parents, drops empty placeholders, dedupes.
+local function moc_add_current()
+  local buf = vim.api.nvim_get_current_buf()
+  if vim.api.nvim_buf_get_name(buf) == "" then
+    vim.notify("No file in the current buffer", vim.log.levels.WARN)
+    return
+  end
+  pick({
+    source = "obs_moc_add_current",
+    title = "Parent MOC(s) to add to this note — Enter = highlighted, Tab = multi-select",
+    items = moc_items(collect_mocs()),
+    multi = true,
+    on_choice = function(msel)
+      local links = {}
+      for _, it in ipairs(msel) do
+        if it.moc then
+          links[#links + 1] = it.moc.link
+        end
+      end
+      if #links == 0 then
+        return
+      end
+      local ok, err = edit_frontmatter_buf(buf, function(d)
+        local kept, present = {}, {}
+        if type(d.parents) == "table" then
+          for _, e in ipairs(d.parents) do
+            local t = link_target(e)
+            if type(e) == "string" and t and t ~= "" then
+              kept[#kept + 1] = e
+              present[t] = true
+            end
+          end
+        end
+        for _, link in ipairs(links) do
+          local t = link_target(link)
+          if not (t and present[t]) then
+            kept[#kept + 1] = link
+            if t then
+              present[t] = true
+            end
+          end
+        end
+        d.parents = kept
+      end, { "parents" })
+      vim.notify(
+        ok and ("Added %d parent MOC(s)"):format(#links) or ("Couldn't update parents: " .. tostring(err)),
+        ok and vim.log.levels.INFO or vim.log.levels.ERROR
+      )
+    end,
+  })
+end
+
+-- ── note pickers that replace obsidian.nvim built-ins ────────────────────────
+-- These wrap quick-switch / backlinks / links so multi-select opens the chosen
+-- notes in the background (via open_notes), instead of opening just one.
+
+-- <leader>oq — quick-switch over every note in the vault.
+local function obs_quick_switch()
+  pick({
+    source = "obs_quick_switch",
+    title = "Notes — Enter opens; Tab marks several to open in background",
+    items = all_note_items(),
+    multi = true,
+    on_choice = open_notes,
+  })
+end
+
+-- <leader>ob — notes that link TO the current note (backlinks).
+local function obs_backlinks()
+  local note = require("obsidian.api").current_note(0)
+  if not note then
+    vim.notify("Not in a note", vim.log.levels.WARN)
+    return
+  end
+  note:backlinks_async({}, function(matches)
+    local seen, items = {}, {}
+    for _, m in ipairs(matches) do
+      local p = tostring(m.path)
+      if not seen[p] then
+        seen[p] = true
+        items[#items + 1] = { text = relpath(p), file = p }
+      end
+    end
+    if #items == 0 then
+      vim.notify("No backlinks", vim.log.levels.INFO)
+      return
+    end
+    table.sort(items, function(a, b)
+      return a.text < b.text
+    end)
+    vim.schedule(function()
+      pick({
+        source = "obs_backlinks",
+        title = "Backlinks — Enter opens; Tab marks several to open in background",
+        items = items,
+        multi = true,
+        on_choice = open_notes,
+      })
+    end)
+  end)
+end
+
+-- refid → path map for the whole vault (filename stems, relpaths, and aliases all
+-- lower-cased), so wiki-links — including alias links like [[home]] — resolve right.
+local function vault_path_index()
+  local path_of = {}
+  for _, p in ipairs(vault_md_files()) do
+    local fm = read_fm(p)
+    if fm then
+      for id in pairs(note_ref_ids(p, fm.data)) do
+        path_of[id] = path_of[id] or p
+      end
+    end
+  end
+  return path_of
+end
+
+-- <leader>ol — open the notes the current note links to. Wiki-links are resolved
+-- through the vault index (alias-aware), so [[home]] → mocs/home moc.md, etc.
+local function obs_links()
+  local note = require("obsidian.api").current_note(0)
+  if not note then
+    vim.notify("Not in a note", vim.log.levels.WARN)
+    return
+  end
+  local path_of = vault_path_index()
+  local seen, items = {}, {}
+  for _, m in ipairs(note:links()) do
+    local tgt = link_target(m.link)
+    local p = (tgt and tgt ~= "") and path_of[tgt] or nil
+    if p and not seen[p] then
+      seen[p] = true
+      items[#items + 1] = { text = m.link .. "  →  " .. relpath(p), file = p }
+    end
+  end
+  if #items == 0 then
+    vim.notify("No resolvable wiki-links to notes here", vim.log.levels.INFO)
+    return
+  end
+  table.sort(items, function(a, b)
+    return a.text < b.text
+  end)
+  pick({
+    source = "obs_links",
+    title = "Outgoing links — Enter opens; Tab marks several to open in background",
+    items = items,
+    multi = true,
+    on_choice = open_notes,
+  })
+end
+
+-- <leader>om / <leader>oQ — quick-switch over MOCs (breadcrumb picker; typing a
+-- MOC name keeps its whole subtree). Multi-select opens them in the background.
+local function obs_moc_switch()
+  pick({
+    source = "obs_moc_switch",
+    title = "MOCs — Enter opens; Tab marks several to open in background",
+    items = moc_items(collect_mocs()),
+    multi = true,
+    on_choice = open_notes,
+  })
+end
+
+-- <leader>oB — notes that declare the CURRENT note as a parent (i.e. backlinks
+-- via the `parents:` frontmatter only, not generic body links).
+local function obs_parent_backlinks()
+  local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
+  if path == "" or vim.fn.filereadable(path) == 0 then
+    vim.notify("No file in the current buffer", vim.log.levels.WARN)
+    return
+  end
+  local children = collect_children({ path = path, stem = vim.fn.fnamemodify(path, ":t:r") })
+  if #children == 0 then
+    vim.notify("No notes declare this note as a parent", vim.log.levels.INFO)
+    return
+  end
+  local items = {}
+  for _, c in ipairs(children) do
+    items[#items + 1] = { text = relpath(c.path), file = c.path }
+  end
+  table.sort(items, function(a, b)
+    return a.text < b.text
+  end)
+  pick({
+    source = "obs_parent_backlinks",
+    title = "Parent-backlinks (notes parented here) — Enter opens; Tab marks several",
+    items = items,
+    multi = true,
+    on_choice = open_notes,
+  })
+end
+
+-- <leader>of / <leader>oF — pick notes whose vault path contains `needle`
+-- (e.g. "fleeting" or "in_progress", which match across all the mirrored trees).
+local function obs_notes_in(needle, label)
+  local items = {}
+  for _, p in ipairs(vault_md_files()) do
+    local rel = relpath(p)
+    if rel:find(needle, 1, true) then
+      items[#items + 1] = { text = rel, file = p }
+    end
+  end
+  if #items == 0 then
+    vim.notify("No notes with '" .. needle .. "' in their path", vim.log.levels.INFO)
+    return
+  end
+  table.sort(items, function(a, b)
+    return a.text < b.text
+  end)
+  pick({
+    source = "obs_path_" .. needle,
+    title = label .. " — Enter opens; Tab marks several to open in background",
+    items = items,
+    multi = true,
+    on_choice = open_notes,
+  })
+end
+
 -- ── plugin spec ────────────────────────────────────────────────────────────────
 
 return {
@@ -1425,6 +1720,11 @@ return {
     },
     {
       "<leader>op",
+      moc_add_current,
+      desc = "Obsidian add parent MOC(s) to this note",
+    },
+    {
+      "<leader>oS",
       moc_swap,
       desc = "Obsidian MOC swap (re-parent notes off this MOC)",
     },
@@ -1456,11 +1756,21 @@ return {
     },
     {
       "<leader>om",
+      obs_moc_switch,
+      desc = "Obsidian MOC quick-switch",
+    },
+    {
+      "<leader>oQ",
+      obs_moc_switch,
+      desc = "Obsidian MOC quick-switch",
+    },
+    {
+      "<leader>ov",
       move_current_file,
       desc = "Obsidian move current file to a directory",
     },
     {
-      "<leader>oM",
+      "<leader>oV",
       move_files,
       desc = "Obsidian move selected files to a directory",
     },
@@ -1488,6 +1798,40 @@ return {
       add_tags_to_frontmatter,
       desc = "Obsidian add tag(s) to frontmatter",
     },
+    {
+      "<leader>oq",
+      obs_quick_switch,
+      desc = "Obsidian quick switch (multi → open in background)",
+    },
+    {
+      "<leader>ob",
+      obs_backlinks,
+      desc = "Obsidian backlinks (multi → open in background)",
+    },
+    {
+      "<leader>oB",
+      obs_parent_backlinks,
+      desc = "Obsidian parent-backlinks (notes parented here)",
+    },
+    {
+      "<leader>of",
+      function()
+        obs_notes_in("fleeting", "Fleeting notes")
+      end,
+      desc = "Obsidian notes with 'fleeting' in path",
+    },
+    {
+      "<leader>oF",
+      function()
+        obs_notes_in("in_progress", "In-progress notes")
+      end,
+      desc = "Obsidian notes with 'in_progress' in path",
+    },
+    {
+      "<leader>ol",
+      obs_links,
+      desc = "Obsidian links (multi → open in background)",
+    },
   },
 
   config = function(_, opts)
@@ -1507,6 +1851,10 @@ return {
     vim.api.nvim_create_user_command("ObsWorkDaily", function() open_daily(true) end, { desc = "Open today's work daily note" })
     vim.api.nvim_create_user_command("ObsTagInsert", insert_tags_at_cursor, { desc = "Insert #tag(s) at cursor" })
     vim.api.nvim_create_user_command("ObsTagAdd", add_tags_to_frontmatter, { desc = "Add tag(s) to frontmatter" })
+    vim.api.nvim_create_user_command("ObsMocSwitch", obs_moc_switch, { desc = "Quick-switch over MOCs" })
+    vim.api.nvim_create_user_command("ObsParentBacklinks", obs_parent_backlinks, { desc = "Notes that declare this note a parent" })
+    vim.api.nvim_create_user_command("ObsFleeting", function() obs_notes_in("fleeting", "Fleeting notes") end, { desc = "Notes with 'fleeting' in the path" })
+    vim.api.nvim_create_user_command("ObsInProgress", function() obs_notes_in("in_progress", "In-progress notes") end, { desc = "Notes with 'in_progress' in the path" })
   end,
 
   opts = {

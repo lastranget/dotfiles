@@ -78,10 +78,9 @@ vim.keymap.set('n', "<leader>os", function()
   vim.cmd('Obsidian quick_switch')
 end, { desc = "split obsidian home (from anywhere)" })
 
-vim.keymap.set('n', "<leader>ov", function()
-  vim.cmd.vsplit(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md')))
-  vim.cmd('Obsidian quick_switch')
-end, { desc = "vsplit obsidian home (from anywhere)" })
+-- <leader>ov is now "move current file to a directory" (defined in
+-- plugins/obsidian.lua). The old "vsplit obsidian home" binding was dropped;
+-- <leader>oo (edit) and <leader>os (split) still open home.
 
 -- Add yank filepath command
 vim.keymap.set('n', '<leader>yp', function()
@@ -147,21 +146,16 @@ end, { desc = "Go to last tab" })
 vim.keymap.set("n", "<leader>tc", "<cmd>Obsidian toggle_checkbox<cr>", {
   desc = "Toggle checkbox",
 })
-vim.keymap.set("n", "<leader>oq", "<cmd>Obsidian quick_switch<cr>", {
-  desc = "Obsidian quick switcher",
-})
-vim.keymap.set("n", "<leader>ob", "<cmd>Obsidian backlinks<cr>", {
-  desc = "Obsidian backlinks",
-})
+-- <leader>oq / <leader>ob are defined in plugins/obsidian.lua
+-- (custom pickers: multi-select opens the chosen notes in the background).
 vim.keymap.set("n", "<leader>og", "<cmd>Obsidian search<cr>", {
   desc = "Obsidian grep",
 })
 vim.keymap.set("n", "<leader>oi", "<cmd>Obsidian template<cr>", {
   desc = "Obsidian insert template",
 })
-vim.keymap.set("n", "<leader>ol", "<cmd>Obsidian links<cr>", {
-  desc = "Obsidian links",
-})
+-- <leader>ol is defined in plugins/obsidian.lua
+-- (custom picker: multi-select opens the linked notes in the background).
 -- <leader>on / <leader>oN are defined in plugins/obsidian.lua
 -- (new note → template picker → name → parent MOC picker).
 vim.keymap.set("n", "<leader>oh", "<cmd>Obsidian tags<cr>", {
