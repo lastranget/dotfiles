@@ -311,13 +311,135 @@ return {
       },
     }
 
-    -- Filename with modified indicator
+    local uv = vim.uv or vim.loop
+
+    -- Cache for shortened paths, keyed by "cwd\0filepath".
+    local short_path_cache = {}
+
+    -- Abbreviate a single directory name to the shortest prefix that
+    -- distinguishes it from its sibling directories in `parent`.
+    local function abbreviate_dir(parent, name)
+      local siblings = {}
+      local handle = uv.fs_scandir(parent)
+      if handle then
+        while true do
+          local entry, typ = uv.fs_scandir_next(handle)
+          if not entry then
+            break
+          end
+          -- Only directories are siblings worth distinguishing from.
+          if entry ~= name and (typ == "directory" or typ == "link") then
+            table.insert(siblings, entry)
+          end
+        end
+      end
+
+      -- Grow the prefix until no other sibling shares it, but always show at
+      -- least 2 characters (or the whole name, if it is shorter).
+      for k = math.min(2, #name), #name do
+        local prefix = name:sub(1, k)
+        local collision = false
+        for _, sib in ipairs(siblings) do
+          if sib:sub(1, k) == prefix then
+            collision = true
+            break
+          end
+        end
+        if not collision then
+          return prefix
+        end
+      end
+      return name
+    end
+
+    -- Join two path segments, tolerating a trailing slash on `a`.
+    local function path_join(a, b)
+      if a:sub(-1) == "/" then
+        return a .. b
+      end
+      return a .. "/" .. b
+    end
+
+    -- Returns true if `path` is `dir` or a descendant of it.
+    local function is_under(path, dir)
+      return path == dir or path:sub(1, #dir + 1) == dir .. "/"
+    end
+
+    -- Compute the abbreviated directory prefix and bare filename for a file.
+    -- Each directory is shortened to the fewest characters needed to tell it
+    -- apart from its sibling directories. Files under the cwd are shown
+    -- relative to it; files elsewhere are shown relative to $HOME with a
+    -- leading "~/" (or absolute, if outside $HOME too).
+    -- Returns (dir_prefix, filename).
+    local function shorten_path(filepath)
+      local cwd = vim.fn.getcwd():gsub("/+$", "")
+      local home = (uv.os_homedir() or vim.fn.expand("~")):gsub("/+$", "")
+
+      local cache_key = cwd .. "\0" .. filepath
+      local cached = short_path_cache[cache_key]
+      if cached then
+        return cached.dir, cached.name
+      end
+
+      local start_dir, rel, display_prefix
+      if is_under(filepath, cwd) then
+        start_dir = cwd
+        rel = filepath:sub(#cwd + 2)
+        display_prefix = ""
+      elseif is_under(filepath, home) then
+        start_dir = home
+        rel = filepath:sub(#home + 2)
+        display_prefix = "~/"
+      else
+        start_dir = "/"
+        rel = filepath:sub(2)
+        display_prefix = "/"
+      end
+
+      local components = vim.split(rel, "/", { plain = true })
+      local filename = table.remove(components)
+
+      local current_dir = start_dir
+      local abbreviated = {}
+      for _, comp in ipairs(components) do
+        table.insert(abbreviated, abbreviate_dir(current_dir, comp))
+        current_dir = path_join(current_dir, comp)
+      end
+
+      local dir = display_prefix
+      if #abbreviated > 0 then
+        dir = dir .. table.concat(abbreviated, "/") .. "/"
+      end
+
+      short_path_cache[cache_key] = { dir = dir, name = filename }
+      return dir, filename
+    end
+
+    -- Filename with shortened path and modified indicator
     local FileName = {
       init = function(self)
         self.filename = vim.api.nvim_buf_get_name(0)
         -- Parse JDT URI if applicable
         self.jdt_parsed = parse_jdt_uri(self.filename)
+
+        self.short_dir = nil
+        self.short_name = nil
+        -- Only shorten real, absolute filesystem paths (skip JDT/scheme buffers).
+        if not self.jdt_parsed and self.filename ~= "" and self.filename:sub(1, 1) == "/" then
+          self.short_dir, self.short_name = shorten_path(self.filename)
+        end
       end,
+      -- Abbreviated directory prefix (dimmed)
+      {
+        condition = function(self)
+          return self.short_dir ~= nil and self.short_dir ~= ""
+        end,
+        provider = function(self)
+          return self.short_dir
+        end,
+        hl = { fg = "gray" },
+      },
+      -- Filename
       {
         provider = function(self)
           -- Handle JDT URIs (Maven dependencies)
@@ -325,7 +447,11 @@ return {
             return format_jdt_display(self.jdt_parsed) .. " "
           end
 
-          -- Normal file handling
+          if self.short_name and self.short_name ~= "" then
+            return self.short_name .. " "
+          end
+
+          -- Fallback for special buffers / no name
           local filename = vim.fn.fnamemodify(self.filename, ":t")
           if filename == "" then
             return "[No Name] "

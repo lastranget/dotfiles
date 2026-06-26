@@ -57,9 +57,17 @@ local SRT_DIR = vim.fn.expand("~/.sandbox/srt")
 -- config path or `false`.
 local OVERRIDE = setmetatable({}, { __tostring = function() return "override" end })
 
--- Active (default) sandbox: an srt config path, `false` for "no sandbox", or
--- OVERRIDE. Only <leader>sc changes this; the <leader>se "exchange" picker takes
--- a one-shot sandbox override without touching it.
+-- Sentinel sandbox value meaning "no srt sandbox, but still pass
+-- --dangerously-skip-permissions" — i.e. the unsandboxed-yet-unprompted launch.
+-- This is the deliberately dangerous combination plain `false` ("no sandbox")
+-- avoids: false keeps permission prompts because nothing contains the session,
+-- whereas this drops both nets. A unique table (truthy, like OVERRIDE) so it
+-- can't collide with an srt config path or `false`.
+local NOSANDBOX_SKIP = setmetatable({}, { __tostring = function() return "no sandbox (skip perms)" end })
+
+-- Active (default) sandbox: an srt config path, `false` for "no sandbox",
+-- NOSANDBOX_SKIP, or OVERRIDE. Only <leader>sc changes this; the <leader>se
+-- "exchange" picker takes a one-shot sandbox override without touching it.
 local sandbox = SRT_DIR .. "/bypass.json"
 
 -- Build a tool command that runs whatever is on the clipboard as the launch
@@ -84,9 +92,11 @@ end
 
 -- Full argv for a plain `claude` launch. `args` are claude arguments after the
 -- binary name (empty for a fresh session). `sb` is the sandbox to use: pass nil
--- to use the active default, an srt config path, or `false` for no sandbox.
---   sandbox: srt --settings <cfg> claude <args> --dangerously-skip-permissions
---   none:    claude <args> --permission-mode default
+-- to use the active default, an srt config path, `false` for no sandbox, or
+-- NOSANDBOX_SKIP for no sandbox with skip-permissions.
+--   sandbox:        srt --settings <cfg> claude <args> --dangerously-skip-permissions
+--   none:           claude <args> --permission-mode default
+--   none+skip-perms: claude <args> --dangerously-skip-permissions   (NOSANDBOX_SKIP)
 local function claude_argv(args, sb)
   if sb == nil then
     sb = sandbox
@@ -95,11 +105,15 @@ local function claude_argv(args, sb)
     return override_wrap()
   end
   local argv = {}
-  if sb then
+  -- Only a real srt config path (a string) gets the srt prefix; NOSANDBOX_SKIP
+  -- is truthy but means "no sandbox", so it skips it.
+  if sb and sb ~= NOSANDBOX_SKIP then
     vim.list_extend(argv, { "srt", "--settings", sb })
   end
   argv[#argv + 1] = "claude"
   vim.list_extend(argv, args or {})
+  -- Both srt-sandboxed and NOSANDBOX_SKIP launches skip permission prompts
+  -- (both are truthy); only plain `false` keeps the default permission mode.
   if sb then
     argv[#argv + 1] = "--dangerously-skip-permissions"
   else
@@ -150,6 +164,9 @@ local function claude_resume_wrap(use_env, sb, sid)
       [[  "$bf"/*) set -- "$bf/env.sh" env -u CLAUDE_CODE_USE_BEDROCK COLORTERM=truecolor "$@" ;;]],
       [[esac]],
     })
+  elseif sb == NOSANDBOX_SKIP then
+    -- no srt, but still skip permission prompts (the dangerous combination).
+    lines[#lines + 1] = [[set -- "$@" --dangerously-skip-permissions]]
   elseif sb then
     lines[#lines + 1] = [[set -- "$@" --dangerously-skip-permissions]]
     lines[#lines + 1] = ([[set -- srt --settings %s "$@"]]):format(vim.fn.shellescape(sb))
@@ -169,6 +186,9 @@ local function sandbox_label(sb)
   end
   if sb == OVERRIDE then
     return "override"
+  end
+  if sb == NOSANDBOX_SKIP then
+    return "no sandbox (skip perms)"
   end
   if sb == false then
     return "no sandbox"
@@ -232,8 +252,9 @@ local function terminal_title(terminal)
 end
 
 -- srt config chooser. Lists every *.json under ~/.sandbox/srt by basename, plus
--- "no sandbox" and "override" entries, marks the active default, and calls
--- `cb(value, label)` with the chosen srt config path, `false` (no sandbox), or
+-- "no sandbox", "no sandbox (skip perms)" and "override" entries, marks the
+-- active default, and calls `cb(value, label)` with the chosen srt config path,
+-- `false` (no sandbox), NOSANDBOX_SKIP (no sandbox + skip permissions), or
 -- OVERRIDE (run the clipboard as the command). Not called if the picker is
 -- cancelled. The picker itself never mutates `sandbox`.
 local function select_sandbox(prompt, cb)
@@ -244,6 +265,7 @@ local function select_sandbox(prompt, cb)
     items[#items + 1] = { label = vim.fn.fnamemodify(f, ":t:r"), value = f }
   end
   items[#items + 1] = { label = "no sandbox", value = false }
+  items[#items + 1] = { label = "no sandbox (skip perms)", value = NOSANDBOX_SKIP }
   items[#items + 1] = { label = "override (clipboard command)", value = OVERRIDE }
   vim.ui.select(items, {
     prompt = prompt,

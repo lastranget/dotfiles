@@ -64,7 +64,7 @@ alias oldvim=/usr/bin/vim
 alias vim=nvim
 
 #neovim obsidian alias
-alias obsidian='nvim ~/vaults/Main/views/home.md'
+alias obsidian='nvim "$HOME/vaults/Main/mocs/home moc.md"'
 alias o=obsidian
 
 # set bash to vi editing mode

@@ -4,7 +4,7 @@
 # Clones bare repo and checks out dotfiles to $HOME
 #
 # To install dotfiles on a new machine, run:
-#   curl -sSL https://raw.githubusercontent.com/lastranget/dotfiles/master/load_repo_on_new_machine.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/lastranget/dotfiles/master/scripts/load_repo_on_new_machine.sh | bash
 
 set -e
 

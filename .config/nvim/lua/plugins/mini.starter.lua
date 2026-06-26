@@ -32,11 +32,11 @@ return {
         { name = "Switch Worktree", action = "lua require('worktree').pick()",   section = "Worktree" },
         { name = "Create Worktree", action = "lua require('worktree').create()", section = "Worktree" },
 
-        { name = "Open Vault",    action = "lua pcall(require, 'obsidian'); vim.cmd('edit ~/vaults/Main/views/home.md'); vim.cmd('Obsidian quick_switch')", section = "Obsidian" },
-        { name = "Tasks MOC",     action = "edit ~/vaults/Main/views/tasks\\ moc.md", section = "Obsidian" },
-        { name = "Work Tasks MOC", action = "edit ~/vaults/Main/views/work\\ tasks\\ moc.md", section = "Obsidian" },
+        { name = "Open Vault",    action = "lua pcall(require, 'obsidian'); vim.cmd.edit(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md'))); vim.cmd('Obsidian quick_switch')", section = "Obsidian" },
+        { name = "Tasks MOC",     action = "edit ~/vaults/Main/mocs/tasks\\ moc.md", section = "Obsidian" },
+        { name = "Work Tasks",    action = "edit ~/vaults/Main/mocs/work\\ tasks.md", section = "Obsidian" },
         { name = "Search Notes",  action = "lua pcall(require, 'obsidian'); vim.cmd('Obsidian search')", section = "Obsidian" },
-        { name = "New Note",      action = "lua pcall(require, 'obsidian'); vim.cmd('Obsidian new_from_template')", section = "Obsidian" },
+        { name = "New Note",      action = "lua pcall(require, 'obsidian'); vim.cmd('ObsNew')", section = "Obsidian" },
         { name = "Today's Note",  action = "lua pcall(require, 'obsidian'); vim.cmd('Obsidian today')", section = "Obsidian" },
 
         { name = "Claude",        action = "lua require('sidekick.cli').toggle({ name = 'claude', focus = true })",  section = "AI Sidekick" },

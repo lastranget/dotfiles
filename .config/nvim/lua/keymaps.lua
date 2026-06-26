@@ -69,17 +69,17 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 -- Add open obsidian anywhere command
 vim.keymap.set('n', "<leader>oo", function()
-  vim.cmd('edit ~/vaults/Main/views/home.md')
+  vim.cmd.edit(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md')))
   vim.cmd('Obsidian quick_switch')
 end, { desc = "Open obsidian home (from anywhere)" })
 
 vim.keymap.set('n', "<leader>os", function()
-  vim.cmd('split ~/vaults/Main/views/home.md')
+  vim.cmd.split(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md')))
   vim.cmd('Obsidian quick_switch')
 end, { desc = "split obsidian home (from anywhere)" })
 
 vim.keymap.set('n', "<leader>ov", function()
-  vim.cmd('vsplit ~/vaults/Main/views/home.md')
+  vim.cmd.vsplit(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md')))
   vim.cmd('Obsidian quick_switch')
 end, { desc = "vsplit obsidian home (from anywhere)" })
 
@@ -156,15 +156,14 @@ vim.keymap.set("n", "<leader>ob", "<cmd>Obsidian backlinks<cr>", {
 vim.keymap.set("n", "<leader>og", "<cmd>Obsidian search<cr>", {
   desc = "Obsidian grep",
 })
-vim.keymap.set("n", "<leader>od", "<cmd>Obsidian template<cr>", {
-  desc = "Obsidian template",
+vim.keymap.set("n", "<leader>oi", "<cmd>Obsidian template<cr>", {
+  desc = "Obsidian insert template",
 })
 vim.keymap.set("n", "<leader>ol", "<cmd>Obsidian links<cr>", {
   desc = "Obsidian links",
 })
-vim.keymap.set("n", "<leader>on", "<cmd>Obsidian new_from_template<cr>", {
-  desc = "Obsidian new",
-})
+-- <leader>on / <leader>oN are defined in plugins/obsidian.lua
+-- (new note → template picker → name → parent MOC picker).
 vim.keymap.set("n", "<leader>oh", "<cmd>Obsidian tags<cr>", {
   desc = "Obsidian new",
 })
@@ -214,6 +213,11 @@ end, { desc = 'Switch git worktree' })
 vim.keymap.set('n', '<leader>W', function()
   require('worktree').create()
 end, { desc = 'Create git worktree' })
+
+-- Next buffer (repeatable with <C-q>)
+vim.keymap.set('n', '<leader>b', repeatable(function()
+  vim.cmd('bnext')
+end), { desc = 'Next buffer (repeatable with <C-q>)' })
 
 -- Add command to invoke repeatable functions
 vim.keymap.set('n', '<C-q>', function()
