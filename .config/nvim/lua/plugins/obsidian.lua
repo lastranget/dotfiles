@@ -20,8 +20,17 @@
 --   <leader>ov / oV          move current file / picked files to a directory
 --   <leader>oq / ob / ol     note pickers (all notes / backlinks / outgoing links)
 --   <leader>oB               parent-backlinks (notes that declare this note a parent)
+--   <leader>of / oF          notes whose path contains "fleeting" / "in_progress"
+--   <leader>o.               compose palette: pick a source of notes → multi-select → pick an action
 -- Any picker that opens notes: Enter opens the highlighted one; Tab marks several,
 -- which are then added to the buffer list in the background (open_notes).
+--
+-- ADDING A COMMAND: prefer expressing new functionality as a *source* (a function
+-- that produces a note list) and/or an *action* (a function that operates on the
+-- selected notes), and registering it in PALETTE_SOURCES / PALETTE_ACTIONS so it
+-- becomes automatically composable via the <leader>o. palette. A dedicated keybind
+-- can then be a thin wrapper over those. Only write a standalone command when the
+-- behaviour genuinely doesn't fit the source → select → action shape.
 --
 -- Frontmatter is read and rewritten through obsidian.nvim's OWN yaml module
 -- (`obsidian.yaml` + `obsidian.frontmatter`) rather than hand-rolled string
@@ -1322,13 +1331,16 @@ local function move_files()
   })
 end
 
--- <leader>od / <leader>oD — open (creating if needed) today's daily log, under
--- work/daily or daily, foldered by year / abbreviated month
--- (e.g. daily/2026/Jun/2026-06-25.md). Work logs use the "Work Log" template,
--- personal logs use "Log"; the template's {{date}} fills in.
-local function open_daily(work)
-  local dir = (work and "work/daily" or "daily") .. "/" .. os.date("%Y") .. "/" .. os.date("%b")
-  local id = os.date("%Y-%m-%d")
+-- <leader>od / <leader>oD — open (creating if needed) THIS WEEK's log, under
+-- work/weekly or weekly, foldered by ISO year (e.g. weekly/2026/2026-W27.md).
+-- The same note opens for every day of the week (ISO weeks, Mon–Sun). Work logs
+-- use the "Work Log" template, personal logs use "Log". On first creation we
+-- inject a back-link to the previous ISO week's note so the logs chain together
+-- (the static core-Templates plugin can't compute the prior week's filename).
+local function open_weekly(work)
+  local year = os.date("%G") -- ISO year (correct across year boundaries)
+  local id = year .. "-W" .. os.date("%V") -- ISO week number, e.g. 2026-W27
+  local dir = (work and "work/weekly" or "weekly") .. "/" .. year
   local abs = VAULT .. "/" .. dir .. "/" .. id .. ".md"
   if vim.fn.filereadable(abs) == 1 then
     vim.cmd.edit(vim.fn.fnameescape(abs))
@@ -1336,6 +1348,36 @@ local function open_daily(work)
   end
   local note = require("obsidian.note").create({ id = id, dir = dir, template = (work and "Work Log" or "Log") })
   note:write({})
+
+  -- Previous ISO week (7 days back handles month/year boundaries via %G/%V).
+  local prev_t = os.time() - 7 * 24 * 60 * 60
+  local prev_id = os.date("%G", prev_t) .. "-W" .. os.date("%V", prev_t)
+  local link = "← [[" .. prev_id .. "]]"
+  local lines = vim.fn.readfile(abs)
+  local fm_end -- line of the closing '---' of the frontmatter
+  if lines[1] == "---" then
+    for i = 2, #lines do
+      if lines[i] == "---" then
+        fm_end = i
+        break
+      end
+    end
+  end
+  local out = {}
+  for i = 1, (fm_end or 0) do
+    out[#out + 1] = lines[i]
+  end
+  out[#out + 1] = ""
+  out[#out + 1] = link
+  local start = (fm_end or 0) + 1
+  if lines[start] == "" then -- drop one existing blank to avoid a double gap
+    start = start + 1
+  end
+  for i = start, #lines do
+    out[#out + 1] = lines[i]
+  end
+  vim.fn.writefile(out, abs)
+
   note:open({ sync = true })
 end
 
@@ -1688,6 +1730,434 @@ local function obs_notes_in(needle, label)
   })
 end
 
+-- ── compose palette (<leader>o.) ─────────────────────────────────────────────
+-- Mix any SOURCE (a way to produce a note list) with any ACTION (a way to
+-- operate on the selection): pick a source → multi-select notes → pick an action.
+-- Sources are `function(cb)` (so async ones like backlinks work like sync ones);
+-- actions are `function(items)`. Extend the system by adding a row to either table.
+
+-- The buffer the palette was opened from — for "this note" sources, which run
+-- after the source picker has closed and focus has returned here.
+local palette_origin_buf
+-- Forward declaration; assigned below. The AND/OR/NOT set-algebra actions re-enter
+-- the palette (combining the next source with the current selection), and the
+-- action table is defined above palette_run, so it must reference this.
+local palette_run
+
+local function palette_path_items(needle)
+  local items = {}
+  for _, p in ipairs(vault_md_files()) do
+    local rel = relpath(p)
+    if rel:find(needle, 1, true) then
+      items[#items + 1] = { text = rel, file = p }
+    end
+  end
+  table.sort(items, function(a, b)
+    return a.text < b.text
+  end)
+  return items
+end
+
+local function palette_weedy_paths()
+  local rows = {}
+  for _, p in ipairs(rg_files_matching("weedy")) do
+    local fm = read_fm(p)
+    if fm and fm.ok and type(fm.data.tags) == "table" and vim.tbl_contains(fm.data.tags, "weedy") then
+      local st = (vim.uv or vim.loop).fs_stat(p)
+      rows[#rows + 1] = { path = p, mtime = (st and st.mtime and st.mtime.sec) or 0 }
+    end
+  end
+  table.sort(rows, function(a, b)
+    return a.mtime < b.mtime
+  end)
+  local paths = {}
+  for _, r in ipairs(rows) do
+    paths[#paths + 1] = r.path
+  end
+  return paths
+end
+
+local function palette_parent_backlink_paths()
+  local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(palette_origin_buf), ":p")
+  if path == "" then
+    return {}
+  end
+  local paths = {}
+  for _, c in ipairs(collect_children({ path = path, stem = vim.fn.fnamemodify(path, ":t:r") })) do
+    paths[#paths + 1] = c.path
+  end
+  return paths
+end
+
+local function palette_backlinks(cb)
+  local note = require("obsidian.api").current_note(palette_origin_buf)
+  if not note then
+    vim.notify("Not in a note", vim.log.levels.WARN)
+    return cb({})
+  end
+  note:backlinks_async({}, function(matches)
+    local seen, items = {}, {}
+    for _, m in ipairs(matches) do
+      local p = tostring(m.path)
+      if not seen[p] then
+        seen[p] = true
+        items[#items + 1] = { text = relpath(p), file = p }
+      end
+    end
+    table.sort(items, function(a, b)
+      return a.text < b.text
+    end)
+    vim.schedule(function()
+      cb(items)
+    end)
+  end)
+end
+
+local function palette_links_items()
+  local note = require("obsidian.api").current_note(palette_origin_buf)
+  if not note then
+    vim.notify("Not in a note", vim.log.levels.WARN)
+    return {}
+  end
+  local path_of, seen, items = vault_path_index(), {}, {}
+  for _, m in ipairs(note:links()) do
+    local tgt = link_target(m.link)
+    local p = (tgt and tgt ~= "") and path_of[tgt] or nil
+    if p and not seen[p] then
+      seen[p] = true
+      items[#items + 1] = { text = relpath(p), file = p }
+    end
+  end
+  table.sort(items, function(a, b)
+    return a.text < b.text
+  end)
+  return items
+end
+
+-- Prompt for a search and return notes whose CONTENT matches it (smart-case
+-- regex, like <leader>og), so you can then act on the grep results.
+local function palette_grep(cb)
+  vim.ui.input({ prompt = "Grep notes: " }, function(q)
+    if not q or vim.trim(q) == "" then
+      return
+    end
+    if vim.fn.executable("rg") ~= 1 then
+      vim.notify("ripgrep (rg) is required", vim.log.levels.ERROR)
+      return cb({})
+    end
+    local items = {}
+    for _, p in ipairs(nonempty(vim.fn.systemlist({
+      "rg", "--files-with-matches", "--no-ignore", "--smart-case", "--color=never",
+      "-g", "*.md", "-g", "!templates/**", "--", q, VAULT,
+    }))) do
+      items[#items + 1] = { text = relpath(p), file = p }
+    end
+    table.sort(items, function(a, b)
+      return a.text < b.text
+    end)
+    cb(items)
+  end)
+end
+
+-- Pick root MOC(s), then produce their whole parents-subtree (direct + recursive
+-- children, ranked) as the note list — the <leader>oc expansion, as a source.
+local function palette_moc_subtree(cb)
+  pick({
+    source = "obs_palette_subtree_roots",
+    title = "Root MOC(s) for subtree — Tab multi, Enter",
+    items = moc_items(collect_mocs()),
+    multi = true,
+    on_choice = function(rsel)
+      local roots = {}
+      for _, it in ipairs(rsel) do
+        if it.moc then
+          roots[#roots + 1] = it.moc.path
+        end
+      end
+      if #roots == 0 then
+        return
+      end
+      cb(moc_tree_items(expand_descendants(roots, build_index())))
+    end,
+  })
+end
+
+---@type { [1]: string, [2]: fun(cb: fun(items: table[])) }[]
+local PALETTE_SOURCES = {
+  { "all notes", function(cb) cb(all_note_items()) end },
+  { "all MOCs", function(cb) cb(moc_items(collect_mocs())) end },
+  { "MOC subtree (pick roots)", function(cb) palette_moc_subtree(cb) end },
+  { "grep (content)", function(cb) palette_grep(cb) end },
+  { "path: fleeting", function(cb) cb(palette_path_items("fleeting")) end },
+  { "path: in_progress", function(cb) cb(palette_path_items("in_progress")) end },
+  { "path: notes/", function(cb) cb(palette_path_items("notes/")) end },
+  { "orphans (no MOC parent)", function(cb) cb(path_items((lint_scan()).orphans)) end },
+  { "untyped", function(cb) cb(path_items((lint_scan()).untyped)) end },
+  { "missing description", function(cb) cb(path_items((lint_scan()).no_desc)) end },
+  { "broken parents", function(cb) cb(path_items(broken_paths(lint_scan()))) end },
+  { "malformed frontmatter", function(cb) cb(path_items((lint_scan()).malformed)) end },
+  { "weedy", function(cb) cb(path_items(palette_weedy_paths())) end },
+  { "backlinks → this note", function(cb) palette_backlinks(cb) end },
+  { "parent-backlinks → this note", function(cb) cb(path_items(palette_parent_backlink_paths())) end },
+  { "links from this note", function(cb) cb(palette_links_items()) end },
+}
+
+-- Pick MOC(s), then run apply(links, selected_items). Shared by parent actions;
+-- `selected_items` carry `.moc` (with `.refids`) for actions that need to match
+-- existing parent links (e.g. removal).
+local function palette_pick_mocs(title, apply)
+  pick({
+    source = "obs_palette_mocs",
+    title = title,
+    items = moc_items(collect_mocs()),
+    multi = true,
+    on_choice = function(msel)
+      local links = {}
+      for _, it in ipairs(msel) do
+        if it.moc then
+          links[#links + 1] = it.moc.link
+        end
+      end
+      if #links > 0 then
+        apply(links, msel)
+      end
+    end,
+  })
+end
+
+---@type { [1]: string, [2]: fun(items: table[]) }[]
+local PALETTE_ACTIONS = {
+  { "open", open_notes },
+  { "add parent MOC(s)", function(items) pick_targets_and_apply(items, nil, "add") end },
+  {
+    "set parent MOC(s) (replace)",
+    function(items)
+      palette_pick_mocs("Parent MOC(s) to set — Tab multi, Enter", function(links)
+        local n = 0
+        for _, it in ipairs(items) do
+          if write_parents(it.file, links) then
+            n = n + 1
+          end
+        end
+        vim.notify(("Set parents on %d note(s)"):format(n), vim.log.levels.INFO)
+      end)
+    end,
+  },
+  {
+    "remove parent MOC(s)",
+    function(items)
+      palette_pick_mocs("Parent MOC(s) to remove — Tab multi, Enter", function(_, msel)
+        local remove = {}
+        for _, it in ipairs(msel) do
+          if it.moc and it.moc.refids then
+            for id in pairs(it.moc.refids) do
+              remove[id] = true
+            end
+          end
+        end
+        local applied, skipped = reparent_notes(items, remove, {})
+        vim.notify(
+          ("Removed selected MOC(s) from %d note(s)%s"):format(
+            applied, skipped > 0 and (", skipped " .. skipped .. " (malformed)") or ""
+          ),
+          vim.log.levels.INFO
+        )
+      end)
+    end,
+  },
+  {
+    "clear parents",
+    function(items)
+      local n = 0
+      for _, it in ipairs(items) do
+        if write_parents(it.file, {}) then
+          n = n + 1
+        end
+      end
+      vim.notify(("Cleared parents on %d note(s)"):format(n), vim.log.levels.INFO)
+    end,
+  },
+  {
+    "set type/*",
+    function(items)
+      local titems = {}
+      for _, t in ipairs(TYPE_CHOICES) do
+        titems[#titems + 1] = { text = t, type_tag = t }
+      end
+      pick({
+        source = "obs_palette_type",
+        title = "Type to apply — Enter",
+        items = titems,
+        multi = false,
+        preview = "none",
+        on_choice = function(sel)
+          local t = sel[1] and sel[1].type_tag
+          if not t then
+            return
+          end
+          local n = 0
+          for _, it in ipairs(items) do
+            if add_tag_on(it.file, t) then
+              n = n + 1
+            end
+          end
+          vim.notify(("Tagged %d note(s) %s"):format(n, t), vim.log.levels.INFO)
+        end,
+      })
+    end,
+  },
+  { "set description (prompt each)", function(items) set_descriptions(items) end },
+  {
+    "add tags",
+    function(items)
+      tag_picker("Tag(s) to add — Tab multi, Enter", function(tags)
+        for _, it in ipairs(items) do
+          for _, t in ipairs(tags) do
+            add_tag_on(it.file, t)
+          end
+        end
+        vim.notify(("Added %d tag(s) to %d note(s)"):format(#tags, #items), vim.log.levels.INFO)
+      end)
+    end,
+  },
+  {
+    "move to directory",
+    function(items)
+      pick({
+        source = "obs_palette_move",
+        title = ("Move %d note(s) to — Enter"):format(#items),
+        items = dir_items(),
+        multi = false,
+        preview = "directory",
+        on_choice = function(sel)
+          local it = sel[1]
+          if not it then
+            return
+          end
+          local n, f = 0, 0
+          for _, x in ipairs(items) do
+            if move_file(x.file, it.dir) then
+              n = n + 1
+            else
+              f = f + 1
+            end
+          end
+          vim.notify(
+            ("Moved %d note(s)%s to %s"):format(n, f > 0 and (", " .. f .. " failed") or "", relpath(it.dir)),
+            vim.log.levels.INFO
+          )
+        end,
+      })
+    end,
+  },
+  { "+1 AND source", function(items) palette_run(items, "and") end },
+  { "+ OR source", function(items) palette_run(items, "or") end },
+  {
+    "NOT (invert vs whole vault) → pick a source",
+    function(items)
+      local sel = {}
+      for _, it in ipairs(items) do
+        if it.file then
+          sel[it.file] = true
+        end
+      end
+      local comp = {}
+      for _, it in ipairs(all_note_items()) do
+        if it.file and not sel[it.file] then
+          comp[#comp + 1] = it
+        end
+      end
+      vim.notify(("Inverted to %d note(s) — now pick a source to filter them"):format(#comp), vim.log.levels.INFO)
+      palette_run(comp, "and")
+    end,
+  },
+}
+
+-- Picker over a list of { [1]=name } rows; calls on_pick(row) with the chosen row.
+local function palette_menu(title, list, on_pick)
+  local items = {}
+  for i, row in ipairs(list) do
+    items[#items + 1] = { text = row[1], idx = i }
+  end
+  pick({
+    source = "obs_palette_menu",
+    title = title,
+    items = items,
+    multi = false,
+    preview = "none",
+    on_choice = function(sel)
+      if sel[1] then
+        on_pick(list[sel[1].idx])
+      end
+    end,
+  })
+end
+
+-- The palette driver. `prev_items` + `mode` let an action combine the NEXT source's
+-- output with the current selection: mode "and" intersects the source output with
+-- the selection, "or" unions them (the source still scans the whole vault); a nil
+-- mode just uses the source output as-is (the fresh entry point).
+function palette_run(prev_items, mode)
+  local prev_set = {}
+  if prev_items then
+    for _, it in ipairs(prev_items) do
+      if it.file then
+        prev_set[it.file] = true
+      end
+    end
+  end
+  local within = (mode == "and" and " (∩ selection)") or (mode == "or" and " (∪ selection)") or ""
+  palette_menu("Source — pick a list of notes" .. within, PALETTE_SOURCES, function(src)
+    src[2](function(items)
+      if mode == "and" then
+        items = vim.tbl_filter(function(it)
+          return it.file and prev_set[it.file]
+        end, items)
+      elseif mode == "or" and prev_items then
+        local have = {}
+        for _, it in ipairs(items) do
+          if it.file then
+            have[it.file] = true
+          end
+        end
+        for _, it in ipairs(prev_items) do
+          if it.file and not have[it.file] then
+            have[it.file] = true
+            items[#items + 1] = it
+          end
+        end
+        table.sort(items, function(a, b)
+          return (a.text or "") < (b.text or "")
+        end)
+      end
+      if not items or #items == 0 then
+        vim.notify("'" .. src[1] .. "' produced no notes" .. within, vim.log.levels.INFO)
+        return
+      end
+      pick({
+        source = "obs_palette_notes",
+        title = src[1] .. within .. " — Tab to select, Enter → choose action",
+        items = items,
+        multi = true,
+        on_choice = function(selected)
+          if #selected == 0 then
+            return
+          end
+          palette_menu(("Action — apply to %d note(s)"):format(#selected), PALETTE_ACTIONS, function(act)
+            act[2](selected)
+          end)
+        end,
+      })
+    end)
+  end)
+end
+
+-- <leader>o. — pick a source, multi-select its notes, pick an action, apply it.
+local function compose_palette()
+  palette_origin_buf = vim.api.nvim_get_current_buf()
+  palette_run(nil)
+end
+
 -- ── plugin spec ────────────────────────────────────────────────────────────────
 
 return {
@@ -1777,16 +2247,16 @@ return {
     {
       "<leader>od",
       function()
-        open_daily(true)
+        open_weekly(true)
       end,
-      desc = "Obsidian work daily note (create if needed)",
+      desc = "Obsidian work weekly note (create if needed)",
     },
     {
       "<leader>oD",
       function()
-        open_daily(false)
+        open_weekly(false)
       end,
-      desc = "Obsidian daily note (create if needed)",
+      desc = "Obsidian weekly note (create if needed)",
     },
     {
       "<leader>oa",
@@ -1828,6 +2298,11 @@ return {
       desc = "Obsidian notes with 'in_progress' in path",
     },
     {
+      "<leader>o.",
+      compose_palette,
+      desc = "Obsidian compose palette (source → notes → action)",
+    },
+    {
       "<leader>ol",
       obs_links,
       desc = "Obsidian links (multi → open in background)",
@@ -1847,14 +2322,15 @@ return {
     vim.api.nvim_create_user_command("ObsMocTree", moc_tree, { desc = "Browse the subtree of selected MOCs" })
     vim.api.nvim_create_user_command("ObsMove", move_current_file, { desc = "Move the current file to a directory" })
     vim.api.nvim_create_user_command("ObsMoveFiles", move_files, { desc = "Move selected files to a directory" })
-    vim.api.nvim_create_user_command("ObsDaily", function() open_daily(false) end, { desc = "Open today's daily note" })
-    vim.api.nvim_create_user_command("ObsWorkDaily", function() open_daily(true) end, { desc = "Open today's work daily note" })
+    vim.api.nvim_create_user_command("ObsWeekly", function() open_weekly(false) end, { desc = "Open this week's note" })
+    vim.api.nvim_create_user_command("ObsWorkWeekly", function() open_weekly(true) end, { desc = "Open this week's work note" })
     vim.api.nvim_create_user_command("ObsTagInsert", insert_tags_at_cursor, { desc = "Insert #tag(s) at cursor" })
     vim.api.nvim_create_user_command("ObsTagAdd", add_tags_to_frontmatter, { desc = "Add tag(s) to frontmatter" })
     vim.api.nvim_create_user_command("ObsMocSwitch", obs_moc_switch, { desc = "Quick-switch over MOCs" })
     vim.api.nvim_create_user_command("ObsParentBacklinks", obs_parent_backlinks, { desc = "Notes that declare this note a parent" })
     vim.api.nvim_create_user_command("ObsFleeting", function() obs_notes_in("fleeting", "Fleeting notes") end, { desc = "Notes with 'fleeting' in the path" })
     vim.api.nvim_create_user_command("ObsInProgress", function() obs_notes_in("in_progress", "In-progress notes") end, { desc = "Notes with 'in_progress' in the path" })
+    vim.api.nvim_create_user_command("ObsCompose", compose_palette, { desc = "Compose: pick a source of notes, then an action" })
   end,
 
   opts = {

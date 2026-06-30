@@ -251,6 +251,28 @@ return {
             Snacks.notify.warn("Delete not supported for this picker", { title = "Snacks Picker" })
           end
         end,
+        -- Submit everything NOT currently selected: the complement of the
+        -- selection within the active filter (filtered-out items are excluded,
+        -- since picker:iter() only yields matches). With nothing selected this
+        -- submits the whole filtered list. Bound to <S-CR> below.
+        confirm_unselected = function(picker)
+          local sel = {}
+          for _, it in ipairs(picker.list.selected) do
+            sel[picker.list:select_key(it)] = true
+          end
+          local comp = {}
+          for item in picker:iter() do
+            if not sel[picker.list:select_key(item)] then
+              comp[#comp + 1] = item
+            end
+          end
+          if #comp == 0 then
+            Snacks.notify.warn("No unselected items to submit", { title = "Snacks Picker" })
+            return
+          end
+          picker.list:set_selected(comp)
+          picker:action("confirm")
+        end,
       },
       -- Add sidekick keybinding to picker input
       win = {
@@ -270,6 +292,7 @@ return {
             ["<C-a>"] = { "select_all", mode = { "n", "i" }, desc = "All" },
             ["<C-d>"] = { "list_delete", mode = { "n", "i" }, desc = "Del" },
             ["<C-v>"] = { "edit_vsplit", mode = { "i", "n" }, desc = "VS" },
+            ["<S-CR>"] = { "confirm_unselected", mode = { "i", "n" }, desc = "Submit unselected" },
           },
           footer = {
             { " ", "SnacksFooter" },
@@ -285,6 +308,8 @@ return {
             { " Del ", "SnacksFooterDesc" },
             { "<C-v>", "SnacksFooterKey" },
             { " VS ", "SnacksFooterDesc" },
+            { "<S-CR>", "SnacksFooterKey" },
+            { " ¬Sel ", "SnacksFooterDesc" },
             { " ", "SnacksFooter" },
           },
         },
@@ -305,6 +330,7 @@ return {
             ["<C-a>"] = { "select_all", desc = "All" },
             ["<C-d>"] = { "list_delete", desc = "Del" },
             ["<C-v>"] = { "edit_vsplit", desc = "VS" },
+            ["<S-CR>"] = { "confirm_unselected", desc = "Submit unselected" },
           },
           footer = {
             { " ", "SnacksFooter" },
@@ -320,6 +346,8 @@ return {
             { " Del ", "SnacksFooterDesc" },
             { "<C-v>", "SnacksFooterKey" },
             { " VS ", "SnacksFooterDesc" },
+            { "<S-CR>", "SnacksFooterKey" },
+            { " ¬Sel ", "SnacksFooterDesc" },
             { " ", "SnacksFooter" },
           },
         },
