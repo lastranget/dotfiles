@@ -158,8 +158,10 @@ vim.keymap.set("n", "<leader>oi", "<cmd>Obsidian template<cr>", {
 -- (custom picker: multi-select opens the linked notes in the background).
 -- <leader>on / <leader>oN are defined in plugins/obsidian.lua
 -- (new note → template picker → name → parent MOC picker).
-vim.keymap.set("n", "<leader>oh", "<cmd>Obsidian tags<cr>", {
-  desc = "Obsidian new",
+vim.keymap.set("n", "<leader>oh", function()
+  vim.cmd.edit(vim.fn.fnameescape(vim.fn.expand('~/vaults/Main/mocs/home moc.md')))
+end, {
+  desc = "Open home MOC",
 })
 vim.keymap.set("n", "<Tab>", function () require("obsidian.api").nav_link("next") end, {
     desc = "Go to next link"

@@ -593,7 +593,7 @@ return {
         jira_links = "Enhance any Jira epic or story IDs (e.g. BFV2-4241, SETI-2037) into full markdown links pointing to https://acs-cas.atlassian.net/browse/<ID>, then use the Atlassian MCP to fetch each issue and append a 1-2 sentence description (summary, type, and status) after the link.",
         add_prompt = "Add a prompt to the prompt list in ~/.config/nvim/lua/plugins/sidekick.lua that (in a sentence (or two, max)) explains to: ",
         line_by_line = "Explain {selection}. Teach me what it does with a line by line visual with explanation to the right of each line.",
-        explain_marklogic_note = "Add {selection} to \"Explaned Marklogic functions.md\" in ~/vaults/Main per the instructions in the document"
+        explain_marklogic_note = "Add {selection} to \"Explaned Marklogic functions.md\" in ~/vaults/Main per the instructions in the document",
       }
     },
   },
