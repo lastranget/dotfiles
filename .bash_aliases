@@ -16,24 +16,11 @@ export PATH=$PATH:/home/txl25/.local/bin
 #add coursier to path for scala lsp
 export PATH=$PATH:/home/txl25/.local/share/coursier/bin
 
-# Search current and parent directories for env.sh and run it with the supplied options
-e () {
-  # searches the current directory then all parent directories for the env.sh script
-  path=$(pwd)
-  while [[ "$path" != "" && ! -e "$path/env.sh" ]]; do
-    path=${path%/*}
-  done
-
-  cmd="$path/env.sh"
-  # if the search was successful we will run the script we found
-  if [[ -e "$cmd" ]]; then
-    # echo "running cmd '$cmd $*'"
-    eval "$cmd $* | tee out.out && push_to_mobile.sh $(basename $PWD) done"
-  # if we cannot find it we will print an error message
-  else
-      echo "env.sh was not found in the current directory or any parent directory"
-  fi
-}
+# Worktree-aware dev-environment launcher. Dispatches to a per-repo override in
+# ~/scripts/worktree-env/<repo>/new/ when one exists (so the container binds to
+# the current worktree), else falls back to the repo's own env.sh.
+# Implementation lives in ~/scripts/worktree-env/e (see the CLAUDE.md there).
+alias e="$HOME/scripts/worktree-env/e"
 
 # Search current and parent directories for my.env.sh and run it with the supplied options.
 # my.env.sh handles its own output logging (to my.out.out), so no tee here.

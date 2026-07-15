@@ -70,6 +70,37 @@ local NOSANDBOX_SKIP = setmetatable({}, { __tostring = function() return "no san
 -- "exchange" picker takes a one-shot sandbox override without touching it.
 local sandbox = SRT_DIR .. "/bypass.json"
 
+-- ── nvim control socket (<leader>p) ───────────────────────────────────────
+-- A dedicated TCP-loopback RPC server that a Claude session can drive with
+-- `nvim --server <addr> --remote-*`. Off by default; <leader>p toggles it, and
+-- the `nvim_socket` prompt (below) hands the live address to Claude.
+--
+-- "127.0.0.1:0" lets the OS assign a free ephemeral port, so multiple nvim
+-- instances never collide. Reachable only from a *host / no-sandbox* Claude
+-- session: the srt sandboxes run under `bwrap --unshare-net` (their own
+-- isolated loopback — a raw `nvim --server` connect gets ECONNREFUSED, and it
+-- bypasses HTTP_PROXY so the socks bridge doesn't help), and the biofinder
+-- docker env has its own netns. Making it reach into a sandbox would need
+-- `allowAllUnixSockets` (all-or-nothing on Linux; opens docker.sock etc.), which
+-- we deliberately don't enable — see ~/.sandbox/srt.
+local control_addr = nil ---@type string|nil
+
+local function toggle_control_socket()
+  if control_addr then
+    pcall(vim.fn.serverstop, control_addr)
+    control_addr = nil
+    vim.notify("nvim control socket OFF", vim.log.levels.INFO)
+    return
+  end
+  local ok, addr = pcall(vim.fn.serverstart, "127.0.0.1:0")
+  if not ok or type(addr) ~= "string" or addr == "" then
+    vim.notify("nvim control socket: failed to start (" .. tostring(addr) .. ")", vim.log.levels.ERROR)
+    return
+  end
+  control_addr = addr
+  vim.notify("nvim control socket ON: " .. control_addr, vim.log.levels.INFO)
+end
+
 -- Build a tool command that runs whatever is on the clipboard as the launch
 -- command, read at launch time. Intended for a hand-crafted `srt … claude …`
 -- line copied from elsewhere, but it will run any shell command. Reads the
@@ -594,6 +625,30 @@ return {
         add_prompt = "Add a prompt to the prompt list in ~/.config/nvim/lua/plugins/sidekick.lua that (in a sentence (or two, max)) explains to: ",
         line_by_line = "Explain {selection}. Teach me what it does with a line by line visual with explanation to the right of each line.",
         explain_marklogic_note = "Add {selection} to \"Explaned Marklogic functions.md\" in ~/vaults/Main per the instructions in the document",
+        -- Function ("string builder") prompt: sidekick resolves function prompts
+        -- at <leader>sp time (cli/context/init.lua), so this embeds the LIVE
+        -- control-socket address of *this* nvim instance. Toggle the socket on
+        -- first with <leader>p. Keep literal `{ }` out of the returned text —
+        -- sidekick runs it through `{context}` expansion and would treat braces
+        -- as context tokens (and error on unknown ones).
+        nvim_socket = function()
+          if not control_addr then
+            return "My Neovim control socket is currently OFF. I'll turn it on with <leader>p, then re-send this."
+          end
+          local a = control_addr
+          return table.concat({
+            "You can control my running Neovim over its RPC socket.",
+            "Address (TCP loopback): " .. a,
+            "",
+            "Drive it from the shell, for example:",
+            "  nvim --server " .. a .. " --remote-send '<keys>'          # feed keystrokes",
+            "  nvim --server " .. a .. " --remote-expr 'luaeval(\"...\")' # evaluate lua / call the API",
+            "  nvim --server " .. a .. " --remote <file>                 # open a file",
+            "",
+            "Use it to open files, show diffs, drive the LSP, jump to locations, etc.",
+            "(Reachable only from a host / no-sandbox session; an srt-sandboxed session can't see it.)",
+          }, "\n")
+        end,
       }
     },
   },
@@ -861,6 +916,14 @@ return {
       -- tmux session, which you do while typing in the terminal.
       mode = { "n", "t" },
       desc = "Switch to Sidekick tmux session",
+    },
+    -- Toggle a TCP-loopback RPC control socket for this nvim instance so a
+    -- host / no-sandbox Claude session can drive it via `nvim --server …`.
+    -- Off by default; pair with the `nvim_socket` prompt via <leader>sp.
+    {
+      "<leader>p",
+      function() toggle_control_socket() end,
+      desc = "Toggle nvim control socket (for Claude)",
     },
   },
 }
