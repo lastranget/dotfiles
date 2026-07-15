@@ -16,6 +16,7 @@ wk.add({
   { "<leader>m", group = "Mini.files / Metals" },
   { "<leader>o", group = "Obsidian" },
   { "<leader>or", group = "Obsidian lint" },
+  { "<leader>ot", group = "Obsidian triage" },
   { "<leader>s", group = "Sidekick/Send" },
   { "<leader>sn", group = "Send New" },
   { "<leader>t", group = "Toggle" },

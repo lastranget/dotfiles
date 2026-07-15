@@ -1,0 +1,97 @@
+#!/bin/bash
+#
+# `e` — worktree-aware dev-environment launcher.
+#
+# Resolves which env.sh to run for the current directory and executes it,
+# preserving the legacy behaviour of the old `e` shell function (tee output to
+# out.out, then fire push_to_mobile.sh on success for command invocations).
+#
+# Resolution order:
+#   1. Identify the repo from git (the primary checkout's directory name).
+#   2. If ~/scripts/worktree-env/<repo>/new/env.sh exists, run THAT override so
+#      the dev container binds to the current worktree.
+#   3. Otherwise fall back to the repo's own env.sh, found by walking up from
+#      the current directory (the original behaviour).
+#
+# Divergence check (generic, applies to any override repo):
+#   Before running, every pristine baseline under <repo>/old/ is compared to the
+#   live copy in the current worktree. If any differ, a warning is printed BEFORE
+#   the command runs (or before going interactive) and AGAIN after it returns (so
+#   it is visible even after a long interactive session). This is only ever a
+#   warning -- the command still runs using the replacements in <repo>/new/.
+#
+# See ~/scripts/worktree-env/CLAUDE.md for the full design.
+
+WORKTREE_ENV_ROOT="${HOME}/scripts/worktree-env"
+
+# --- Identify the repo + current worktree ------------------------------------
+repo_name=""
+project_root=""
+if common_dir="$(git rev-parse --git-common-dir 2>/dev/null)"; then
+  common_dir="$(cd "$(dirname "${common_dir}")" && pwd)/$(basename "${common_dir}")"
+  repo_name="$(basename "$(dirname "${common_dir}")")"
+  project_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+override_dir="${WORKTREE_ENV_ROOT}/${repo_name}"
+
+# --- Choose the command to run -----------------------------------------------
+cmd=""
+use_override=0
+if [ -n "${repo_name}" ] && [ -x "${override_dir}/new/env.sh" ]; then
+  cmd="${override_dir}/new/env.sh"
+  use_override=1
+else
+  # Fallback: walk up from the current directory looking for env.sh.
+  path="$(pwd)"
+  while [[ -n "${path}" && ! -e "${path}/env.sh" ]]; do
+    path="${path%/*}"
+  done
+  [[ -e "${path}/env.sh" ]] && cmd="${path}/env.sh"
+fi
+
+if [[ -z "${cmd}" ]]; then
+  echo "env.sh was not found: no worktree-env override for repo '${repo_name:-<none>}'," >&2
+  echo "and no env.sh in the current directory or any parent directory." >&2
+  exit 1
+fi
+
+# --- Divergence check (generic; only for override repos) ---------------------
+# Compare each pristine baseline under <override_dir>/old against the live copy
+# in the current worktree. Build a warning message; never block.
+divergence_msg=""
+if [ "${use_override}" -eq 1 ] && [ -n "${project_root}" ] && [ -d "${override_dir}/old" ]; then
+  old_dir="${override_dir}/old"
+  diverged_lines=()
+  while IFS= read -r baseline; do
+    rel="${baseline#"${old_dir}/"}"
+    live="${project_root}/${rel}"
+    if [ ! -f "${live}" ]; then
+      diverged_lines+=("         - ${rel}  (no longer exists in the repo)")
+    elif ! diff -q "${baseline}" "${live}" >/dev/null 2>&1; then
+      diverged_lines+=("         - ${rel}  (diff: diff '${old_dir}/${rel}' '${live}')")
+    fi
+  done < <(find "${old_dir}" -type f)
+
+  if [ "${#diverged_lines[@]}" -gt 0 ]; then
+    divergence_msg="[WARN] worktree-env: baselines for '${repo_name}' have diverged from this worktree;
+       the override under ${override_dir}/new may be out of date (running anyway):
+$(printf '%s\n' "${diverged_lines[@]}")"
+  fi
+fi
+
+print_divergence() { [ -n "${divergence_msg}" ] && printf '%s\n' "${divergence_msg}" >&2; }
+
+# --- Run it (warn before, run, warn after) -----------------------------------
+# Command mode preserves the legacy wrapper (tee to out.out, notify on success).
+# Interactive mode (no args) runs the launcher directly so the TTY is preserved.
+print_divergence
+if [ "$#" -gt 0 ]; then
+  "${cmd}" "$@" | tee out.out
+  rc="${PIPESTATUS[0]}"
+  [ "${rc}" -eq 0 ] && push_to_mobile.sh "$(basename "$PWD")" done
+else
+  "${cmd}"
+  rc=$?
+fi
+print_divergence
+exit "${rc}"

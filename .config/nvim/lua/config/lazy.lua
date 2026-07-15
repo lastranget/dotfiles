@@ -25,6 +25,8 @@ require("utils")
 require("worktree")
 -- source keymaps
 require("keymaps")
+-- source generated keymaps (<leader>g "Generated" group; see lua/generated_keymaps.lua)
+require("generated_keymaps")
 -- source autocommands
 require("autocommands")
 

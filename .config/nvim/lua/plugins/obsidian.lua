@@ -14,7 +14,7 @@
 --   <leader>org / :ObsLint    generate the vault hygiene report
 --   <leader>or{o,u,d,b,m}     picker per lint category (orphans/untyped/desc/broken/malformed)
 --   <leader>or{O,U,D,B,M}     resolve that category (assign parent/type/description, fix/open)
---   <leader>ow / :ObsWeedy    weedy triage queue
+--   <leader>otw / :ObsWeedy   weedy triage queue
 --   <leader>oa / oA          insert #tag(s) at cursor / add tag(s) to frontmatter
 --   <leader>om / oQ          MOC quick-switch (breadcrumb picker; subtree-aware)
 --   <leader>ov / oV          move current file / picked files to a directory
@@ -1331,7 +1331,7 @@ local function move_files()
   })
 end
 
--- <leader>od / <leader>oD — open (creating if needed) THIS WEEK's log, under
+-- <leader>ow / <leader>oW — open (creating if needed) THIS WEEK's log, under
 -- work/weekly or weekly, foldered by ISO year (e.g. weekly/2026/2026-W27.md).
 -- The same note opens for every day of the week (ISO weeks, Mon–Sun). Work logs
 -- use the "Work Log" template, personal logs use "Log". On first creation we
@@ -2215,7 +2215,7 @@ return {
     { "<leader>orm", lint_malformed, desc = "Lint: malformed frontmatter" },
     { "<leader>orM", lint_malformed_fix, desc = "Lint: → open malformed to hand-fix" },
     {
-      "<leader>ow",
+      "<leader>otw",
       obs_weedy,
       desc = "Obsidian weedy triage queue",
     },
@@ -2245,14 +2245,14 @@ return {
       desc = "Obsidian move selected files to a directory",
     },
     {
-      "<leader>od",
+      "<leader>ow",
       function()
         open_weekly(true)
       end,
       desc = "Obsidian work weekly note (create if needed)",
     },
     {
-      "<leader>oD",
+      "<leader>oW",
       function()
         open_weekly(false)
       end,
