@@ -39,6 +39,13 @@ return {
       desc = "Diffview Open"
     },
     {
+      "<leader>cr",
+      function()
+        require("diffview-range").pick()
+      end,
+      desc = "Diffview Open range (pick two revisions)"
+    },
+    {
       "<leader>cq",
       function()
         require("diffview").close()

@@ -68,6 +68,16 @@ vim.api.nvim_create_user_command("JdtFormat", format_code, {
 
 local HOME = os.getenv("HOME")
 local ROOT_DIR = require("jdtls.setup").find_root({ 'pom.xml', 'build.gradle', 'gradlew', '.git' })
+
+-- Eclipse workspaces are single-writer and are bound to the source tree that
+-- first imported them, so the -data dir must be unique per absolute root path.
+-- Keying on the basename alone collides across git worktrees (four different
+-- dirs are named prime-middleware), which re-imports one workspace against a
+-- different tree on every switch and corrupts its index.
+local function workspace_name(root)
+    local abs = vim.fn.fnamemodify(root, ":p:h")
+    return vim.fn.fnamemodify(abs, ":t") .. "-" .. vim.fn.sha256(abs):sub(1, 10)
+end
 local CONFIG_DIR = get_os() == "linux" and "config_linux" or "config_mac"
 local DEFAULT_JDK_PATH = get_os() == "linux" and "/usr/lib/jvm/java-21-openjdk-amd64" or "/usr/local/opt/openjdk@21"
 
@@ -207,7 +217,7 @@ local config = {
         "-configuration",
         HOME .. "/.local/share/language.servers/java/jdtls/" .. CONFIG_DIR,
         "-data",
-        HOME .. "/.cache/jdtls/workspace/" .. vim.fn.fnamemodify(ROOT_DIR or vim.fn.getcwd(), ":p:h:t")
+        HOME .. "/.cache/jdtls/workspace/" .. workspace_name(ROOT_DIR or vim.fn.getcwd())
     },
     root_dir = ROOT_DIR,
     filetypes = { 'java' },

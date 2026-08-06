@@ -317,3 +317,5 @@ unmount-usb() {
   udisksctl unmount -b "$device"
 }
 alias umnt=unmount-usb
+
+alias eink='nvim "/home/txl25/vaults/Main/work/fleeting/Work Eink Tasks.md"'

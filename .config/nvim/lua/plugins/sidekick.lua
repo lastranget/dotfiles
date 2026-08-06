@@ -489,6 +489,71 @@ local function exchange_sandbox()
   end)
 end
 
+-- ── send a Diffview's file list to a CLI (<leader>sD) ─────────────────────
+-- Paste every file tracked by the Diffview in the current tabpage into the CLI
+-- terminal as `@path` mentions — byte-for-byte what a snacks picker
+-- multi-selection + <c-x> produces, because it goes through sidekick's own
+-- picker send callback (`_send_cb`, the same private entry point picker.lua's
+-- `sidekick_send_context` action uses).
+--
+-- `diffview.lib.get_current_view()` is keyed on the tabpage, so this resolves
+-- from any window of the Diffview tab (file panel or either diff buffer) and is
+-- nil everywhere else — that's the guard making this Diffview-only.
+--
+-- Which files: a DiffviewOpen view (DiffView) has a FileDict, whose `iter()`
+-- walks the conflicting, working *and* staged sets — i.e. the whole file panel.
+-- A DiffviewFileHistory view (FileHistoryView) has no such list; the closest
+-- equivalent is the log entry under the cursor, so it sends that commit's files.
+local function send_diffview_files()
+  local ok, lib = pcall(require, "diffview.lib")
+  if not ok then
+    vim.notify("sidekick: diffview.nvim is not available", vim.log.levels.WARN)
+    return
+  end
+  local view = lib.get_current_view()
+  if not view then
+    vim.notify("sidekick: not in a Diffview tab", vim.log.levels.WARN)
+    return
+  end
+
+  local files = {} ---@type table[] FileEntry[]
+  if view.files then
+    -- DiffView: conflicting + working + staged, in file-panel order
+    for _, file in view.files:iter() do
+      files[#files + 1] = file
+    end
+  else
+    -- FileHistoryView: cur_item is { LogEntry, FileEntry } (and is nil'd on
+    -- destroy, hence the guards)
+    local entry = view.panel and view.panel.cur_item and view.panel.cur_item[1]
+    vim.list_extend(files, entry and entry.files or {})
+  end
+
+  -- The working and staged sets can both list the same path (a file that's
+  -- modified *and* partially staged), so dedupe to one mention per file.
+  local items, seen = {}, {}
+  for _, file in ipairs(files) do
+    local path = file.absolute_path
+    if path and not seen[path] then
+      seen[path] = true
+      -- Deliberately no `cwd`: Loc.get then relativizes against nvim's cwd —
+      -- which is where the CLI is running — and falls back to the absolute path
+      -- when the file lives outside it (e.g. the $HOME dotfiles view opened by
+      -- <leader>cc while nvim's cwd is ~/.config/nvim). Passing the Diffview's
+      -- own toplevel instead would hand Claude paths relative to a directory it
+      -- isn't in.
+      items[#items + 1] = { name = path }
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("sidekick: no files in this Diffview", vim.log.levels.WARN)
+    return
+  end
+
+  require("sidekick.cli.picker")._send_cb({ kind = "file" })(items)
+end
+
 return {
  "folke/sidekick.nvim",
   opts = {
@@ -797,6 +862,13 @@ return {
       function() require("sidekick.cli").prompt() end,
       mode = { "n", "x" },
       desc = "Sidekick Select Prompt",
+    },
+    -- Diffview → CLI. Normal-mode only and only meaningful inside a Diffview
+    -- tab; elsewhere it just warns (see send_diffview_files).
+    {
+      "<leader>sD",
+      function() send_diffview_files() end,
+      desc = "Send Diffview files (Diffview tab only)",
     },
     {
       "<leader>sc",
