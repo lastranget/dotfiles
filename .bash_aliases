@@ -54,6 +54,29 @@ alias vim=nvim
 alias obsidian='nvim "$HOME/vaults/Main/mocs/home moc.md"'
 alias o=obsidian
 
+# Open the latest work weekly note, mirroring <leader>ow in the nvim config
+# (see ~/.config/nvim/lua/plugins/obsidian.lua open_weekly). Weekly notes live
+# under work/weekly/<ISO-year>/<ISO-year>-W<ISO-week>.md. Opens this week's note
+# if it exists, else falls back to the most recent existing weekly note.
+ow () {
+  local year week file
+  year=$(date +%G)   # ISO year (correct across year boundaries)
+  week=$(date +%V)   # ISO week number
+  file="$HOME/vaults/Main/work/weekly/$year/$year-W$week.md"
+  if [[ -f "$file" ]]; then
+    nvim "$file"
+  else
+    # No note for the current week yet — open the newest one that exists.
+    local latest
+    latest=$(ls -1 "$HOME/vaults/Main/work/weekly"/*/*.md 2>/dev/null | sort | tail -1)
+    if [[ -n "$latest" ]]; then
+      nvim "$latest"
+    else
+      echo "No weekly notes found under $HOME/vaults/Main/work/weekly" >&2
+    fi
+  fi
+}
+
 # set bash to vi editing mode
 set -o vi
 export EDITOR=nvim

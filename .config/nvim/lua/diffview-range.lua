@@ -110,13 +110,31 @@ local function format_item(item, picker)
   }
 end
 
+-- Preview diffs are capped. Some commits in large repos rewrite generated
+-- files -- one commit in biofinder touches a 700k-line graph.json -- and snacks
+-- streams every line of `git show` into a scratch buffer and syntax-highlights
+-- it, which made navigating the picker crawl (a ~900k-line preview). Piping
+-- through `head` makes git exit early via SIGPIPE, so the preview is effectively
+-- instant regardless of diff size.
+--
+-- `--stat` is deliberately omitted: computing a diffstat forces git to walk the
+-- entire diff (~6s on that commit) even though `head` would discard the tail,
+-- which defeats the cap. The commit header + capped patch is enough to pick by.
+local PREVIEW_LINES = 2000
+
 local function preview_item(ctx)
-  if not ctx.item.working_tree then
-    return Snacks.picker.preview.git_show(ctx)
-  end
-  -- vs HEAD rather than the index, so the preview covers staged and unstaged
-  -- together -- matching what diffview shows for this row.
-  Snacks.picker.preview.cmd({ "git", "--no-pager", "diff", "HEAD" }, ctx, { ft = "git" })
+  -- Working-tree row diffs vs HEAD (staged + unstaged together, matching what
+  -- diffview shows for LOCAL); commit rows show the commit itself. Args are
+  -- passed positionally ($1=cap, $2=commit) rather than interpolated so nothing
+  -- from the item lands in the shell string.
+  local script = ctx.item.working_tree
+      and 'git --no-pager diff HEAD | head -n "$1"'
+      or 'git --no-pager show --patch "$2" | head -n "$1"'
+  Snacks.picker.preview.cmd(
+    { "sh", "-c", script, "sh", tostring(PREVIEW_LINES), ctx.item.commit or "" },
+    ctx,
+    { ft = "git" }
+  )
 end
 
 local function pick(title, items, on_choice)
