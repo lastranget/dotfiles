@@ -2336,7 +2336,7 @@ return {
   opts = {
     ui = { enable = false }, -- use render-markdown instead
     picker = {
-      name = "snacks.pick",
+      name = "snacks.picker",
     },
 
     -- Disable backup files when editing vault files to prevent sync conflicts
