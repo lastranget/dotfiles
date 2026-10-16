@@ -4,12 +4,18 @@
 #   harpoon add    fzf over every note in the vault; selected notes are pushed
 #                  onto the top of the list (re-adding moves a note to the top)
 #   harpoon open   fzf over the list; selected notes open in nvim
-#                  (ctrl-d removes the highlighted/marked entries)
-#   harpoon ls     print the list, newest first
+#                  (0-9 opens the entry with that number directly,
+#                  ctrl-d removes the highlighted/marked entries)
+#   harpoon open N open entry N directly, no picker (the h0..h9 aliases)
+#   harpoon ls     print the list, pinned entries first, then newest first
 #   harpoon rm F.. remove entries from the list
 #
-# The list is stored as a JSON array of vault-relative paths in harpoon.json
-# next to this script.
+# Entries 0 and 1 are always pinned: 0 is the "eink" note, 1 is this week's
+# log -- the one nvim's <leader>ow opens (personal log unless OBSIDIAN_OW=work),
+# opened via :ObsOwWeekly so it gets created from its template if missing.
+#
+# The rest of the list is stored as a JSON array of vault-relative paths in
+# harpoon.json next to this script.
 
 set -euo pipefail
 
@@ -19,6 +25,15 @@ STORE="$(dirname "$SELF")/harpoon.json"
 
 [[ -f "$STORE" ]] || echo '[]' > "$STORE"
 
+EINK="work/fleeting/Work Eink Tasks.md"
+
+# This week's log, matching open_weekly() in ~/.config/nvim/lua/plugins/obsidian.lua.
+weekly() {
+  local dir=weekly
+  [[ "${OBSIDIAN_OW:-}" == work ]] && dir=work/weekly
+  printf '%s/%s/%s-W%s.md\n' "$dir" "$(date +%G)" "$(date +%G)" "$(date +%V)"
+}
+
 # Write stdin to the store atomically.
 save() {
   local tmp
@@ -27,8 +42,8 @@ save() {
   mv "$tmp" "$STORE"
 }
 
-# Print the list, dropping entries whose files no longer exist.
-cmd_ls() {
+# Print the stored list, dropping entries whose files no longer exist.
+stored() {
   local kept=() f
   while IFS= read -r f; do
     [[ -e "$VAULT/$f" ]] && kept+=("$f")
@@ -38,6 +53,14 @@ cmd_ls() {
   fi
   (( ${#kept[@]} )) && printf '%s\n' "${kept[@]}"
   return 0
+}
+
+# The full list: pinned entries first, then the stored ones (minus any pins).
+cmd_ls() {
+  local week
+  week="$(weekly)"
+  printf '%s\n' "$EINK" "$week"
+  stored | grep -vxF -e "$EINK" -e "$week" || true
 }
 
 # Push args onto the top of the list, preserving their given order.
@@ -65,27 +88,52 @@ cmd_add() {
   printf 'harpooned: %s\n' "${files[@]}"
 }
 
-cmd_open() {
-  if [[ -z "$(cmd_ls)" ]]; then
-    echo "harpoon list is empty; add notes with 'ha'" >&2
-    return 1
-  fi
-  local picked
-  picked="$(cd "$VAULT" && cmd_ls \
-    | fzf --multi --no-sort --layout=reverse --prompt='harpoon> ' \
-          --header='enter: open, tab: mark multiple, ctrl-d: remove' \
-          --bind="ctrl-d:execute-silent('$SELF' rm {+})+reload('$SELF' ls)" \
-          --preview="head -50 -- {}")" || return 0
-  [[ -n "$picked" ]] || return 0
-  mapfile -t files <<< "$picked"
+# The list with the first 10 entries prefixed "N<tab>", the rest "<space><tab>".
+cmd_numbered() {
+  cmd_ls | awk '{ printf "%s\t%s\n", (NR <= 10 ? NR - 1 : " "), $0 }'
+}
+
+# Open the given vault-relative notes in nvim. This week's log goes through
+# :ObsOwWeekly so it is created from its template when it doesn't exist yet.
+open_files() {
+  local week f args=() files=()
+  week="$(weekly)"
+  for f in "$@"; do
+    if [[ "$f" == "$week" ]]; then args=(-c ObsOwWeekly); else files+=("$f"); fi
+  done
   cd "$VAULT"
-  exec nvim -- "${files[@]}"
+  exec nvim "${args[@]}" -- "${files[@]}"
+}
+
+cmd_open() {
+  local out key
+  if [[ -n "${1:-}" ]]; then
+    [[ "$1" =~ ^[0-9]+$ ]] || { echo "harpoon: not an entry number: $1" >&2; return 1; }
+    mapfile -t files < <(cmd_ls | sed -n "$(($1 + 1))p")
+    (( ${#files[@]} )) || { echo "harpoon: no entry $1" >&2; return 1; }
+    open_files "${files[@]}"
+  fi
+  out="$(cd "$VAULT" && cmd_numbered \
+    | fzf --multi --no-sort --layout=reverse --prompt='harpoon> ' \
+          --delimiter=$'\t' --nth=2.. --expect=0,1,2,3,4,5,6,7,8,9 \
+          --header='0-9: open #, enter: open, tab: mark multiple, ctrl-d: remove' \
+          --bind="ctrl-d:execute-silent('$SELF' rm {+2})+reload('$SELF' numbered)" \
+          --preview="head -50 -- {2} 2>/dev/null || echo '(not created yet)'")" || return 0
+  key="$(head -1 <<< "$out")"
+  if [[ -n "$key" ]]; then
+    mapfile -t files < <(cmd_ls | sed -n "$((key + 1))p")
+  else
+    mapfile -t files < <(tail -n +2 <<< "$out" | cut -f2-)
+  fi
+  (( ${#files[@]} )) && [[ -n "${files[0]}" ]] || return 0
+  open_files "${files[@]}"
 }
 
 case "${1:-open}" in
   add)  cmd_add ;;
-  open) cmd_open ;;
+  open) cmd_open "${2:-}" ;;
   ls)   cmd_ls ;;
+  numbered) cmd_numbered ;;
   rm)   shift; cmd_rm "$@" ;;
-  *)    sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *)    sed -n '2,19p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

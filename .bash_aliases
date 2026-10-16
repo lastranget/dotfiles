@@ -335,6 +335,11 @@ alias umnt=unmount-usb
 
 alias eink='nvim "/home/txl25/vaults/Main/work/fleeting/Work Eink Tasks.md"'
 
+#which weekly log nvim's <leader>ow (and harpoon's h1) opens: personal or work; <leader>oW opens the other
+export OBSIDIAN_OW=personal
+
 #obsidian harpoon: ha = pin vault notes, h = open a pinned note (see ~/scripts/obsidian-harpoon/harpoon)
 alias ha="$HOME/scripts/obsidian-harpoon/harpoon add"
 alias h="$HOME/scripts/obsidian-harpoon/harpoon open"
+#h0..h9 = open harpoon entry N directly (h0 = eink note, h1 = this week's <leader>ow log)
+for _i in {0..9}; do alias "h$_i=$HOME/scripts/obsidian-harpoon/harpoon open $_i"; done; unset _i

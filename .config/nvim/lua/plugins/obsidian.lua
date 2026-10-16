@@ -1335,23 +1335,47 @@ end
 -- work/weekly or weekly, foldered by ISO year (e.g. weekly/2026/2026-W27.md).
 -- The same note opens for every day of the week (ISO weeks, Mon–Sun). Work logs
 -- use the "Work Log" template, personal logs use "Log". On first creation we
--- inject a back-link to the previous ISO week's note so the logs chain together
--- (the static core-Templates plugin can't compute the prior week's filename).
+-- inject a back-link to the most recent earlier weekly note that exists (weeks
+-- with no note are skipped) so the logs chain together (the static
+-- core-Templates plugin can't compute that filename).
+--
+-- Which log is on <leader>ow is per-machine: $OBSIDIAN_OW=work (exported in
+-- ~/.bash_aliases on the work branch) puts the work log on <leader>ow and the
+-- personal log on <leader>oW; otherwise it's the reverse. ~/scripts/obsidian-harpoon
+-- reads the same variable for its pinned "1".
+local OW_IS_WORK = vim.env.OBSIDIAN_OW == "work"
+
+-- Id of the newest weekly note under VAULT/<base>/<year>/ that sorts before id
+-- (ids are zero-padded "YYYY-Www", so string order is chronological), or nil.
+local function prev_weekly_id(base, id)
+  local best
+  for _, f in ipairs(vim.fn.glob(VAULT .. "/" .. base .. "/*/*.md", false, true)) do
+    local cand = vim.fn.fnamemodify(f, ":t:r")
+    if cand:match("^%d%d%d%d%-W%d%d$") and cand < id and (not best or cand > best) then
+      best = cand
+    end
+  end
+  return best
+end
+
 local function open_weekly(work)
   local year = os.date("%G") -- ISO year (correct across year boundaries)
   local id = year .. "-W" .. os.date("%V") -- ISO week number, e.g. 2026-W27
-  local dir = (work and "work/weekly" or "weekly") .. "/" .. year
+  local base = work and "work/weekly" or "weekly"
+  local dir = base .. "/" .. year
   local abs = VAULT .. "/" .. dir .. "/" .. id .. ".md"
   if vim.fn.filereadable(abs) == 1 then
     vim.cmd.edit(vim.fn.fnameescape(abs))
     return
   end
+  -- Look up the previous note before creating this one (it would match the glob).
+  local prev_id = prev_weekly_id(base, id)
   local note = require("obsidian.note").create({ id = id, dir = dir, template = (work and "Work Log" or "Log") })
   note:write({})
-
-  -- Previous ISO week (7 days back handles month/year boundaries via %G/%V).
-  local prev_t = os.time() - 7 * 24 * 60 * 60
-  local prev_id = os.date("%G", prev_t) .. "-W" .. os.date("%V", prev_t)
+  if not prev_id then -- first weekly note of this kind: nothing to link back to
+    note:open({ sync = true })
+    return
+  end
   local link = "← [[" .. prev_id .. "]]"
   local lines = vim.fn.readfile(abs)
   local fm_end -- line of the closing '---' of the frontmatter
@@ -2164,6 +2188,7 @@ return {
   "obsidian-nvim/obsidian.nvim",
   version = "*", -- recommended, use latest release instead of latest commit
   ft = "markdown",
+  cmd = { "ObsOwWeekly" }, -- lets `nvim +ObsOwWeekly` (obsidian-harpoon) load the plugin
 
   ---@module 'obsidian'
   ---@type obsidian.config
@@ -2247,16 +2272,18 @@ return {
     {
       "<leader>ow",
       function()
-        open_weekly(true)
+        open_weekly(OW_IS_WORK)
       end,
-      desc = "Obsidian work weekly note (create if needed)",
+      desc = OW_IS_WORK and "Obsidian work weekly note (create if needed)"
+        or "Obsidian weekly note (create if needed)",
     },
     {
       "<leader>oW",
       function()
-        open_weekly(false)
+        open_weekly(not OW_IS_WORK)
       end,
-      desc = "Obsidian weekly note (create if needed)",
+      desc = OW_IS_WORK and "Obsidian weekly note (create if needed)"
+        or "Obsidian work weekly note (create if needed)",
     },
     {
       "<leader>oa",
@@ -2324,6 +2351,7 @@ return {
     vim.api.nvim_create_user_command("ObsMoveFiles", move_files, { desc = "Move selected files to a directory" })
     vim.api.nvim_create_user_command("ObsWeekly", function() open_weekly(false) end, { desc = "Open this week's note" })
     vim.api.nvim_create_user_command("ObsWorkWeekly", function() open_weekly(true) end, { desc = "Open this week's work note" })
+    vim.api.nvim_create_user_command("ObsOwWeekly", function() open_weekly(OW_IS_WORK) end, { desc = "Open the weekly note <leader>ow opens" })
     vim.api.nvim_create_user_command("ObsTagInsert", insert_tags_at_cursor, { desc = "Insert #tag(s) at cursor" })
     vim.api.nvim_create_user_command("ObsTagAdd", add_tags_to_frontmatter, { desc = "Add tag(s) to frontmatter" })
     vim.api.nvim_create_user_command("ObsMocSwitch", obs_moc_switch, { desc = "Quick-switch over MOCs" })
