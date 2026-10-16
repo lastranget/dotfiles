@@ -26,6 +26,20 @@ return {
     config = function()
         local dap = require("dap")
 
+        -- MarkLogic XQuery debugging via our forked mlxprs adapter (local build).
+        -- Source + adapter: ~/marklogic_homebrew/dap (branch: neovim).
+        -- Registers dap.adapters.xquery + dap.configurations.xquery and the
+        -- :MarkLogicDbgConnect / :MarkLogicDbgDisconnect commands. Requires a
+        -- local build: cd ~/marklogic_homebrew/dap && npm install && npm run build:dap
+        do
+            local ml_nvim = vim.fn.expand("~/marklogic_homebrew/dap/nvim")
+            if vim.fn.filereadable(ml_nvim .. "/marklogic-dap.lua") == 1 then
+                package.path = package.path .. ";" .. ml_nvim .. "/?.lua"
+                local ok, ml = pcall(require, "marklogic-dap")
+                if ok then ml.setup(dap) else vim.notify("marklogic-dap: " .. tostring(ml), vim.log.levels.WARN) end
+            end
+        end
+
         -- DAP signs for breakpoints
         vim.fn.sign_define("DapBreakpoint", { text = "●", texthl = "DapBreakpoint", linehl = "", numhl = "" })
         vim.fn.sign_define("DapBreakpointCondition", { text = "◆", texthl = "DapBreakpointCondition", linehl = "", numhl = "" })

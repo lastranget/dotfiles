@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Harpoon-style pinned file list for the Obsidian vault.
+#
+#   harpoon add    fzf over every note in the vault; selected notes are pushed
+#                  onto the top of the list (re-adding moves a note to the top)
+#   harpoon open   fzf over the list; selected notes open in nvim
+#                  (ctrl-d removes the highlighted/marked entries)
+#   harpoon ls     print the list, newest first
+#   harpoon rm F.. remove entries from the list
+#
+# The list is stored as a JSON array of vault-relative paths in harpoon.json
+# next to this script.
+
+set -euo pipefail
+
+VAULT="${HARPOON_VAULT:-$HOME/vaults/Main}"
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+STORE="$(dirname "$SELF")/harpoon.json"
+
+[[ -f "$STORE" ]] || echo '[]' > "$STORE"
+
+# Write stdin to the store atomically.
+save() {
+  local tmp
+  tmp="$(mktemp "$STORE.XXXXXX")"
+  cat > "$tmp"
+  mv "$tmp" "$STORE"
+}
+
+# Print the list, dropping entries whose files no longer exist.
+cmd_ls() {
+  local kept=() f
+  while IFS= read -r f; do
+    [[ -e "$VAULT/$f" ]] && kept+=("$f")
+  done < <(jq -r '.[]' "$STORE")
+  if (( ${#kept[@]} != $(jq length "$STORE") )); then
+    printf '%s\n' "${kept[@]}" | jq -R . | jq -s . | save
+  fi
+  (( ${#kept[@]} )) && printf '%s\n' "${kept[@]}"
+  return 0
+}
+
+# Push args onto the top of the list, preserving their given order.
+push() {
+  printf '%s\n' "$@" | jq -R . | jq -s --slurpfile cur "$STORE" \
+    '. as $new | $new + ($cur[0] - $new)' | save
+}
+
+cmd_rm() {
+  printf '%s\n' "$@" | jq -R . | jq -s --slurpfile cur "$STORE" \
+    '. as $del | $cur[0] - $del' | save
+}
+
+cmd_add() {
+  local picked
+  picked="$(cd "$VAULT" && find . \( -name '.*' -a ! -name . \) -prune -o -type f -name '*.md' -print \
+    | sed 's|^\./||' | sort \
+    | fzf --multi --prompt='harpoon add> ' \
+          --header='tab: mark multiple, enter: add' \
+          --preview="head -50 -- {}")" || return 0
+  [[ -n "$picked" ]] || return 0
+  # Newest selection on top: reverse fzf's selection order.
+  mapfile -t files < <(tac <<< "$picked")
+  push "${files[@]}"
+  printf 'harpooned: %s\n' "${files[@]}"
+}
+
+cmd_open() {
+  if [[ -z "$(cmd_ls)" ]]; then
+    echo "harpoon list is empty; add notes with 'ha'" >&2
+    return 1
+  fi
+  local picked
+  picked="$(cd "$VAULT" && cmd_ls \
+    | fzf --multi --no-sort --layout=reverse --prompt='harpoon> ' \
+          --header='enter: open, tab: mark multiple, ctrl-d: remove' \
+          --bind="ctrl-d:execute-silent('$SELF' rm {+})+reload('$SELF' ls)" \
+          --preview="head -50 -- {}")" || return 0
+  [[ -n "$picked" ]] || return 0
+  mapfile -t files <<< "$picked"
+  cd "$VAULT"
+  exec nvim -- "${files[@]}"
+}
+
+case "${1:-open}" in
+  add)  cmd_add ;;
+  open) cmd_open ;;
+  ls)   cmd_ls ;;
+  rm)   shift; cmd_rm "$@" ;;
+  *)    sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

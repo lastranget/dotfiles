@@ -268,8 +268,12 @@ return {
 				others = {
 					-- dartls = {},
 
-					-- XQuery LSP (xq-lsp) — installed manually via npm, NOT Mason:
-					--   npm install -g xq-lsp        (resolves through the CAS Artifactory proxy)
+					-- XQuery LSP (xq-lsp) — installed manually from the LOCAL FORK, NOT Mason:
+					--   cd ~/marklogic_homebrew/lsp && npm run build && npm install -g .
+					-- The fork adds MarkLogic 11 support (1.0-ml parsing + cts:/xdmp:/sem:/…
+					-- builtins so go-to-definition & find-references work on MarkLogic code).
+					-- Do NOT `npm install -g xq-lsp`: the public package lacks MarkLogic
+					-- support and would overwrite this install.
 					-- It's a stdio language server (vscode-languageserver based) giving
 					-- diagnostics, hover, completion, signature help, document symbols,
 					-- go-to-definition and code actions for XQuery.

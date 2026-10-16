@@ -10,6 +10,11 @@ export PATH=$PATH:/home/lastranget/.local/share/JetBrains/Toolbox/scripts
 #add scripts directory to path
 export PATH=$PATH:/home/lastranget/scripts
 
+# git-unravel / git-ravel: peel commits off HEAD (keeping changes) and knit them
+# back byte-identical. Uses $HOME so it works regardless of username.
+# Note: this also enables `git unravel` / `git ravel` as git subcommands.
+export PATH="$PATH:$HOME/scripts/git_unravel"
+
 #add .local/bin to path for lazydocker
 export PATH=$PATH:/home/lastranget/.local/bin
 
@@ -329,3 +334,7 @@ unmount-usb() {
 alias umnt=unmount-usb
 
 alias eink='nvim "/home/txl25/vaults/Main/work/fleeting/Work Eink Tasks.md"'
+
+#obsidian harpoon: ha = pin vault notes, h = open a pinned note (see ~/scripts/obsidian-harpoon/harpoon)
+alias ha="$HOME/scripts/obsidian-harpoon/harpoon add"
+alias h="$HOME/scripts/obsidian-harpoon/harpoon open"
