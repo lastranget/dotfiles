@@ -21,12 +21,12 @@ machine-specific tweaks. Commit shared changes to `master`, then rebase `work`.
 
 `cmd_ls` builds the list shown everywhere (`ls`, `numbered`, picker, `open N`):
 
-0. `$EINK`: `work/fleeting/Work Eink Tasks.md`, the same file the `eink` alias
+1. `$EINK`: `work/fleeting/Work Eink Tasks.md`, the same file the `eink` alias
    opens. That alias in `~/.bash_aliases` hardcodes the path too, so change
    both together.
-1. `weekly()`: this week's log (ISO `%G`/`%V`), always the one that nvim's
+2. `weekly()`: this week's log (ISO `%G`/`%V`), always the one that nvim's
    `<leader>ow` opens.
-2. and up: `stored()` entries from `harpoon.json`, minus anything equal to a pin.
+3. and up: `stored()` entries from `harpoon.json`, minus anything equal to a pin.
 
 The pins are computed, never stored. `rm` on a pin does nothing.
 
@@ -51,7 +51,8 @@ The pins are computed, never stored. `rm` on a pin does nothing.
 
 - `h`: picker (`harpoon open`)
 - `ha`: add notes (`harpoon add`)
-- `h0`..`h9`: `harpoon open N`, opens entry N without the picker
+- `h1`..`h9`, `h0`: `harpoon open N`, opens entry N without the picker
+  (1-based; `0` means entry 10, matching the picker's 1-9,0 keys)
 
 ## Testing
 

@@ -4,13 +4,13 @@
 #   harpoon add    fzf over every note in the vault; selected notes are pushed
 #                  onto the top of the list (re-adding moves a note to the top)
 #   harpoon open   fzf over the list; selected notes open in nvim
-#                  (0-9 opens the entry with that number directly,
+#                  (1-9 opens the entry with that number directly, 0 opens #10,
 #                  ctrl-d removes the highlighted/marked entries)
-#   harpoon open N open entry N directly, no picker (the h0..h9 aliases)
+#   harpoon open N open entry N directly, no picker (the h1..h9, h0 aliases)
 #   harpoon ls     print the list, pinned entries first, then newest first
 #   harpoon rm F.. remove entries from the list
 #
-# Entries 0 and 1 are always pinned: 0 is the "eink" note, 1 is this week's
+# Entries 1 and 2 are always pinned: 1 is the "eink" note, 2 is this week's
 # log -- the one nvim's <leader>ow opens (personal log unless OBSIDIAN_OW=work),
 # opened via :ObsOwWeekly so it gets created from its template if missing.
 #
@@ -88,9 +88,16 @@ cmd_add() {
   printf 'harpooned: %s\n' "${files[@]}"
 }
 
-# The list with the first 10 entries prefixed "N<tab>", the rest "<space><tab>".
+# The list with the first 10 entries prefixed "N<tab>" (1-9, then 0 for the
+# 10th), the rest "<space><tab>".
 cmd_numbered() {
-  cmd_ls | awk '{ printf "%s\t%s\n", (NR <= 10 ? NR - 1 : " "), $0 }'
+  cmd_ls | awk '{ printf "%s\t%s\n", (NR < 10 ? NR : NR == 10 ? 0 : " "), $0 }'
+}
+
+# Print entry N of the list (1-based; 0 means the 10th).
+entry() {
+  local n=$(( $1 == 0 ? 10 : $1 ))
+  cmd_ls | sed -n "${n}p"
 }
 
 # Open the given vault-relative notes in nvim. This week's log goes through
@@ -109,19 +116,19 @@ cmd_open() {
   local out key
   if [[ -n "${1:-}" ]]; then
     [[ "$1" =~ ^[0-9]+$ ]] || { echo "harpoon: not an entry number: $1" >&2; return 1; }
-    mapfile -t files < <(cmd_ls | sed -n "$(($1 + 1))p")
+    mapfile -t files < <(entry "$1")
     (( ${#files[@]} )) || { echo "harpoon: no entry $1" >&2; return 1; }
     open_files "${files[@]}"
   fi
   out="$(cd "$VAULT" && cmd_numbered \
     | fzf --multi --no-sort --layout=reverse --prompt='harpoon> ' \
-          --delimiter=$'\t' --nth=2.. --expect=0,1,2,3,4,5,6,7,8,9 \
-          --header='0-9: open #, enter: open, tab: mark multiple, ctrl-d: remove' \
+          --delimiter=$'\t' --nth=2.. --expect=1,2,3,4,5,6,7,8,9,0 \
+          --header='1-9,0: open #, enter: open, tab: mark multiple, ctrl-d: remove' \
           --bind="ctrl-d:execute-silent('$SELF' rm {+2})+reload('$SELF' numbered)" \
           --preview="head -50 -- {2} 2>/dev/null || echo '(not created yet)'")" || return 0
   key="$(head -1 <<< "$out")"
   if [[ -n "$key" ]]; then
-    mapfile -t files < <(cmd_ls | sed -n "$((key + 1))p")
+    mapfile -t files < <(entry "$key")
   else
     mapfile -t files < <(tail -n +2 <<< "$out" | cut -f2-)
   fi

@@ -131,8 +131,10 @@ cfg-stage() {
   fi
 }
 
-# claude dangerous alias
-alias clauded='claude --dangerously-skip-permissions'
+# claude dangerous alias — runs via the sidekick-summary wrapper, which records the
+# session (tmux pane + Claude UUID) so the summary TUI lists it under "Loose", and
+# marks it ended on exit. Args pass through to claude (e.g. `clauded -r <id>`).
+alias clauded='~/repos/summary/sk-clauded --dangerously-skip-permissions'
 
 # clauded-srt [dir ...] [-r ROOT] [-- claude-args ...]
 # Launch Claude under srt with the bypass.json profile + --dangerously-skip-permissions.
@@ -335,11 +337,11 @@ alias umnt=unmount-usb
 
 alias eink='nvim "/home/txl25/vaults/Main/work/fleeting/Work Eink Tasks.md"'
 
-#which weekly log nvim's <leader>ow (and harpoon's h1) opens: personal or work; <leader>oW opens the other
+#which weekly log nvim's <leader>ow (and harpoon's h2) opens: personal or work; <leader>oW opens the other
 export OBSIDIAN_OW=personal
 
 #obsidian harpoon: ha = pin vault notes, h = open a pinned note (see ~/scripts/obsidian-harpoon/harpoon)
 alias ha="$HOME/scripts/obsidian-harpoon/harpoon add"
 alias h="$HOME/scripts/obsidian-harpoon/harpoon open"
-#h0..h9 = open harpoon entry N directly (h0 = eink note, h1 = this week's <leader>ow log)
+#h1..h9, h0 = open harpoon entry N directly (h1 = eink note, h2 = this week's <leader>ow log, h0 = entry 10)
 for _i in {0..9}; do alias "h$_i=$HOME/scripts/obsidian-harpoon/harpoon open $_i"; done; unset _i
